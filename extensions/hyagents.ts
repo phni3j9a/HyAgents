@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { registerRequiredChildExtensions, type RequiredChildExtensionRegistration } from "pi-subagents/required-child-extensions";
-import { activeAgent, modelSpec, ROLES, type RoleName } from "../src/models.ts";
+import { activeAgent, modelSpec, ROLE_NAMES, ROLES } from "../src/models.ts";
+import { checkProviderSelection, configuredSelection } from "../src/native-settings.ts";
+import { modelCommand, modelCompletions } from "../src/model-command.ts";
 
 const policy = readFileSync(new URL("../skills/hyagents/SKILL.md", import.meta.url), "utf8")
   .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "").trim();
@@ -20,23 +22,29 @@ export default function hyagents(pi: ExtensionAPI): void {
     registration = undefined;
   }
 
-  function diagnostics(ctx: ExtensionContext): string[] {
+  async function diagnostics(ctx: ExtensionContext): Promise<{ mapping: string[]; issues: string[] }> {
     const lines: string[] = [];
+    const mapping: string[] = [];
     if (!pi.getAllTools().some((tool) => tool.name === "subagent")) {
       lines.push("pi-subagents is not loaded. Run: pi install npm:pi-subagents@0.76.1, then /reload.");
     }
     if (registrationError) lines.push(registrationError);
     const available = ctx.modelRegistry.getAvailable();
-    for (const [name, role] of Object.entries(ROLES)) {
-      const model = ctx.modelRegistry.find(role.provider, role.id);
-      if (!model) lines.push(`${name}: missing ${role.provider}/${role.id}; update Pi/provider model configuration.`);
-      else if (!getSupportedThinkingLevels(model).includes(role.thinking)) lines.push(`${name}: ${role.thinking} is unsupported; update Pi/provider configuration.`);
-      else if (!available.some((item) => item.provider === role.provider && item.id === role.id)) lines.push(`${name}: authenticate ${role.provider} in Pi before use.`);
+    for (const name of ROLE_NAMES) {
+      try {
+        const role = await configuredSelection(name, ctx);
+        mapping.push(`${name}: ${modelSpec(role)}`);
+        await checkProviderSelection(name, ctx, role);
+        const model = ctx.modelRegistry.find(role.provider, role.id);
+        if (!model) lines.push(`${name}: missing ${role.provider}/${role.id}; update Pi/provider model configuration.`);
+        else if (!getSupportedThinkingLevels(model).includes(role.thinking)) lines.push(`${name}: ${role.thinking} is unsupported; choose a supported value with /hyagents models.`);
+        else if (!available.some((item) => item.provider === role.provider && item.id === role.id)) lines.push(`${name}: authenticate ${role.provider} in Pi before use.`);
+      } catch (error) { lines.push(error instanceof Error ? error.message : String(error)); }
     }
-    return lines;
+    return { mapping, issues: lines };
   }
 
-  pi.on("session_start", (_event, ctx) => {
+  pi.on("session_start", async (_event, ctx) => {
     dispose();
     registrationError = undefined;
     if (activeAgent(ctx.getSystemPrompt())) return;
@@ -48,7 +56,7 @@ export default function hyagents(pi: ExtensionAPI): void {
     } catch (error) {
       registrationError = `HyAgents model verification unavailable: ${error instanceof Error ? error.message : String(error)}`;
     }
-    const issues = diagnostics(ctx);
+    const { issues } = await diagnostics(ctx);
     if (issues.length) ctx.ui.notify(issues.join("\n"), "warning");
   });
   pi.on("session_shutdown", dispose);
@@ -71,11 +79,19 @@ export default function hyagents(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("hyagents", {
-    description: "Show HyAgents model readiness (automatic delegation needs no command)",
-    handler: async (_args, ctx) => {
-      const mapping = (Object.keys(ROLES) as RoleName[]).map((name) => `${name}: ${modelSpec(name)}`);
-      const issues = diagnostics(ctx);
-      ctx.ui.notify([...mapping, "", ...(issues.length ? issues : ["Model registry and authentication configuration ready. Live provider access is checked when each child runs."])].join("\n"), issues.length ? "warning" : "info");
+    description: "Show HyAgents readiness, or choose role models with /hyagents models",
+    getArgumentCompletions: modelCompletions,
+    handler: async (args, ctx) => {
+      try {
+        const trimmed = args.trim();
+        if (trimmed === "models" || trimmed.startsWith("models ")) {
+          await modelCommand(trimmed.slice(6), ctx);
+          return;
+        }
+        if (trimmed) { ctx.ui.notify("Usage: /hyagents [models [worker|scout|reviewer|designer|reset]]", "error"); return; }
+        const { mapping, issues } = await diagnostics(ctx);
+        ctx.ui.notify([...mapping, "", ...(issues.length ? issues : ["Model registry and authentication configuration ready. Live provider access is checked when each child runs."])].join("\n"), issues.length ? "warning" : "info");
+      } catch (error) { ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"); }
     },
   });
 }

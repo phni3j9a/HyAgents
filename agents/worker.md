@@ -1,7 +1,7 @@
 ---
 name: worker
 package: hyagents
-description: Implementation, fixes and refactoring, including local investigation and focused tests. GPT-6 Luna max.
+description: Implementation, fixes and refactoring, including local investigation and focused tests.
 advertise: true
 model: openai-codex/gpt-6-luna:max
 thinking: max

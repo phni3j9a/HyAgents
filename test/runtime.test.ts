@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
+import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import { ROLES, modelSpec, type RoleName } from "../src/models.ts";
+import { saveSelection } from "../src/native-settings.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const fixture = mkdtempSync(path.join(tmpdir(), "hyagents-runtime-"));
@@ -24,7 +26,23 @@ const { getModels } = await import("@earendil-works/pi-ai/compat");
 const { Compile } = await import("typebox/compile");
 const guard = fileURLToPath(new URL("../extensions/verify-child.ts", import.meta.url));
 const registration = registerRequiredChildExtensions({ sessionId: "hyagents-test", extensions: [{ id: "hyagents.models", path: guard }] });
-const factory = createDefaultChildSessionFactory();
+const sessionManagers = new Map<string, SessionManager>();
+const factory = createDefaultChildSessionFactory({
+  loadPiCodingAgent: async () => {
+    const pi = await import("@earendil-works/pi-coding-agent");
+    return { ...pi, createAgentSession: async (...args: Parameters<typeof pi.createAgentSession>) => {
+      const created = await pi.createAgentSession(...args);
+      sessionManagers.set(created.session.sessionId, created.session.sessionManager);
+      return created;
+    } };
+  },
+});
+
+function retainUserTurn(sessionId: string): void {
+  // Pi buffers a never-used session. A user turn persists the actual entries,
+  // including the startup selection, without making a provider request.
+  sessionManagers.get(sessionId)!.appendMessage({ role: "user", content: "Complete the assigned task.", timestamp: Date.now() });
+}
 
 after(async () => {
   await factory.dispose();
@@ -120,6 +138,7 @@ test("native thinking ceiling remains authoritative", async () => {
 
 test("opening a retained native session still verifies model/effort before prompting", async () => {
   const first = await factory.create({ ...launch("hyagents.worker", modelSpec("hyagents.worker")), storage: { kind: "dir", sessionDir: path.join(fixture, "sessions") } });
+  retainUserTurn(first.sessionId);
   const sessionFile = first.sessionFile;
   assert.ok(sessionFile);
   await first.dispose();
@@ -127,4 +146,27 @@ test("opening a retained native session still verifies model/effort before promp
   const resumed = await factory.create(retained);
   await resumed.dispose();
   await assert.rejects(factory.create({ ...retained, model: "openai-codex/gpt-6-luna:low" }), /HyAgents:.*requires/s);
+});
+
+test("saved choices apply to new real children while retained children keep their initial selection", async () => {
+  const originalSettings = JSON.stringify({ packages: [root] });
+  const initial = { provider: "openai-codex", id: "gpt-6.1-sol", thinking: "low" as const };
+  try {
+    await saveSelection(fixture, "hyagents.worker", initial, "user");
+    const preflight = await resolveSubagentLaunchContract({ agent: "hyagents.worker", cwd: fixture });
+    assert.ok(preflight.ok);
+    assert.equal(preflight.contract.model, modelSpec(initial));
+    const first = await factory.create({ ...launch("hyagents.worker", modelSpec(initial)), storage: { kind: "dir", sessionDir: path.join(fixture, "configured-sessions") } });
+    retainUserTurn(first.sessionId);
+    const sessionFile = first.sessionFile!;
+    await first.dispose();
+    await saveSelection(fixture, "hyagents.worker", ROLES["hyagents.worker"], "user");
+    const fresh = await factory.create(launch("hyagents.worker", modelSpec("hyagents.worker")));
+    await fresh.dispose();
+    const resumed = await factory.create({ ...launch("hyagents.worker", modelSpec(initial)), storage: { kind: "file", sessionFile } });
+    await resumed.dispose();
+    await assert.rejects(factory.create({ ...launch("hyagents.worker", modelSpec("hyagents.worker")), storage: { kind: "file", sessionFile } }), /requires.*gpt-6.1-sol:low/);
+  } finally {
+    writeFileSync(path.join(agentDir, "settings.json"), originalSettings);
+  }
 });

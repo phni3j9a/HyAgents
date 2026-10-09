@@ -1,7 +1,7 @@
 ---
 name: scout
 package: hyagents
-description: Read-only code exploration and root-cause investigation when relevant files or dependencies are unknown. GPT-6 Luna xhigh.
+description: Read-only code exploration and root-cause investigation when relevant files or dependencies are unknown.
 advertise: true
 model: openai-codex/gpt-6-luna:xhigh
 thinking: xhigh

@@ -4,6 +4,8 @@
 
 ## Agent構成
 
+以下は**初期値**です。4役割のモデルとThinkingは `/hyagents models` で変更できます。Workerの `max` も変更可能です。
+
 | Agent | PiのモデルID | Thinking | 担当 |
 | --- | --- | --- | --- |
 | Main | Piで選択中のモデル | 現在の設定 | 対話、計画、委任、統合、最終判断 |
@@ -12,7 +14,7 @@
 | `hyagents.reviewer` | `openai-codex/gpt-6.1-sol` | `high` | 変更によって導入された具体的な不具合の検出 |
 | `hyagents.designer` | `anthropic/claude-opus-5-5` | `high` | UI/UX設計、画面・コンポーネント実装 |
 
-Opus 5.5のPiネイティブIDは `claude-opus-5-5` です。OpenAI側は `openai-codex`、Designerは `anthropic` を使用します。別プロバイダーやClaude Codeへの暗黙の切り替えは行いません。
+Opus 5.5のPiネイティブIDは `claude-opus-5-5` です。初期設定ではOpenAI側は `openai-codex`、Designerは `anthropic` を使用します。ユーザーが別のPiプロバイダー／モデルを選択できます。暗黙の切り替えは行いません。
 
 ## インストール
 
@@ -35,7 +37,7 @@ pi install git:github.com/phni3j9a/HyAgents
 
 `pi-subagents` はHyAgentsの依存パッケージにも含まれますが、これは公開の起動検証APIを読み込むためです。依存関係のインストールだけでは `subagent` ツールが有効にならないため、上記の `pi install npm:pi-subagents@0.76.1` も必要です。二重にExtensionを読み込ませる必要はありません。
 
-各プロバイダーの認証はPiの通常の方法で設定してください。HyAgentsは認証情報やグローバル設定を書き換えません。
+各プロバイダーの認証はPiの通常の方法で設定してください。HyAgentsは認証情報を管理しません。モデル設定はユーザーが保存操作を行った場合にだけ更新します。
 
 確認用コマンド:
 
@@ -68,17 +70,53 @@ Mainは小さな作業を直接処理できます。ファイルが不明な読�
 
 Scout／Reviewerの非編集方針はプロンプトによる役割定義です。4つのAgentには独自のツール許可リスト・禁止リストを設定しておらず、Pi／OS／既存Extensionの権限設定はそのまま適用されます。
 
-## モデルとThinkingの固定
+## モデルとThinkingの選択
 
-Agent frontmatterのネイティブ `model` と `thinking` で初期値を指定します。`model` には `:max` などのsuffixも含め、低いThinking設定への意図しない変更を避けます。
+```text
+/hyagents models
+/hyagents models worker
+/hyagents models scout
+/hyagents models reviewer
+/hyagents models designer
+/hyagents models reset
+```
 
-それだけではper-run overrideや設定の優先順位で外れるため、MainのExtensionがpi-subagentsの公開 `required-child-extensions` APIへ小さな検証Extensionを登録します。**実際に解決された子のモデル・Thinkingを `session_start` で照合**し、違う場合は最初のモデルリクエスト前に起動を失敗させます。Piが未対応のThinkingを丸めた場合も通しません。Mainのモデル／Thinkingは変更しません。
+引数なしの `models` は4役割の現在の設定を表示します。役割を選んだ後、**プロバイダー → モデル → Thinking → 保存先**の順に選択します。`models worker` などではその役割の設定を直接開きます。途中でEscなどでキャンセルすると保存しません。
 
-この経路はローカルのネイティブ子セッションに適用されます。通常の `subagent`、ネイティブworkflow、`/run` からの子起動も同じruntimeの仕組みを使います。保持済み子の起動にはpi-subagentsの保持された検証Extension契約が使われます。HyAgentsがセッションファイルを管理することはありません。
+- モデル候補はPiで認証設定済みのプロバイダーの登録モデルです。実際の利用権限・利用枠は起動時に確認されます。
+- Thinkingには、そのモデルが対応する値だけを表示します。推論非対応モデルは `off` です。
+- `User — all projects` はユーザー共通設定、`Project — this project only` はプロジェクト設定へ保存します。未信頼プロジェクトでは後者を表示しません。
+- プロジェクト設定が優先されます。ユーザー共通設定を変更してもプロジェクト設定が優先される場合は、その旨と実効値を表示します。
+- 保存後、**新しく起動する子Agentから反映**されます。設定変更のたびに `/reload` を実行する必要はありません。ほかのPiプロセスの表示は再読込まで古い場合があります。
+- 実行中の子Agentは変更しません。v0.2以降に起動して会話が保存された保持セッションは、再開時も起動時の設定を使います。新設定を使うには新しい子Agentを開始してください。
+- `reset` は保存先を選んで確認した後、4役割のモデル・Thinkingを上表の初期値に戻します。他の設定は維持します。
 
-v0.1は上表の組み合わせを固定仕様とします。`agentOverrides` に違うモデル・Thinkingを設定しても、HyAgentsの子は検証で停止します。別構成に変更する開発では、Agent frontmatterと `src/models.ts` の双方を変更して検証してください。既存の `subagents.modelScope` や `maxThinking` が起動を拒否した場合も、その制約を自動で緩めません。
+保存先はpi-subagents標準の `subagents.agentOverrides` です。ユーザー設定は通常 `~/.pi/agent/settings.json`、プロジェクト設定はpi-subagentsが解決するプロジェクトの `.pi/settings.json` です。設定ルートがない場合、プロジェクト保存時に現在のディレクトリへ `.pi` を作成します。パッケージ内のAgent定義を直接編集する必要はありません。
 
-`hyagents.*` を外部CLI／リモート実行用のAgentで上書きする運用は対象外です。任意の信頼済みExtensionや設定変更に対するセキュリティ境界ではありません。
+例（Workerだけを変更）:
+
+```json
+{
+  "subagents": {
+    "agentOverrides": {
+      "hyagents.worker": {
+        "model": "openai-codex/gpt-6.1-sol:high",
+        "thinking": "high"
+      }
+    }
+  }
+}
+```
+
+通常はコマンドから両項目をまとめて設定してください。手動設定でも `model` のThinking suffixと `thinking` を一致させます。ヘッドレス実行ではこの設定ファイルを利用してください。選択メニューはTUIと選択ダイアログ対応のRPCクライアントで利用できます。
+
+### 選択の検証
+
+MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検証Extensionを登録します。新しい子の設定は公開preflight APIで取得し、**実際のモデル・Thinkingを最初のモデルリクエスト前に照合**します。per-run overrideやPiによる未対応Thinkingの丸めで設定から外れた場合は停止します。Mainのモデル／Thinkingは変更しません。
+
+通常の `subagent`、ネイティブworkflow、`/run` が対象です。保持セッション用の選択はPi標準のcustom entryに記録し、独自のセッションファイルやCheckpointは作りません。v0.1で作成した保持セッションには記録がないため、初回再開時に現在の設定と照合します。不一致なら新しい子Agentを開始してください。
+
+既存の `subagents.modelScope` や `maxThinking` は維持します。起動が拒否されても制約を自動で緩めません。HyAgentsではプロバイダーを含む明示的な役割設定を使い、Main依存の `model: inherit` や競合する `agentOverridesByProvider` は対象外です。後者は `/hyagents` で診断します。`hyagents.*` を外部CLI／リモート実行用Agentで上書きする運用も対象外です。この照合は任意の信頼済みExtensionに対するセキュリティ境界ではありません。
 
 ## Reviewerの出力
 
@@ -101,13 +139,17 @@ v0.1は上表の組み合わせを固定仕様とします。`agentOverrides` �
 | --- | --- |
 | `agents/` | 名前空間付きの4つのネイティブAgent定義 |
 | `skills/hyagents/SKILL.md` | 短い委任方針。Extensionもこの本文を読み、重複した方針を持たない |
-| `extensions/hyagents.ts` | Mainへの自動適用、診断コマンド、検証Extensionの登録 |
+| `extensions/hyagents.ts` | Mainへの自動適用、コマンド登録、検証Extensionの登録 |
 | `extensions/verify-child.ts` | ネイティブ子セッション起動時のモデル検証 |
-| `src/models.ts` | 固定モデル契約と照合 |
+| `src/models.ts` | 推奨初期値、モデル表現と照合 |
+| `src/model-command.ts` | 役割別のモデル・Thinking選択メニュー |
+| `src/native-settings.ts` | ネイティブ設定の読み取りと保存 |
 
 Mainへの適用にはPiの構造化prompt sectionを使い、他のExtensionの指示やprompt cacheを維持します。子AgentへMain用ポリシーを再注入しません。組み込みの `worker`、`scout`、`reviewer` は上書きしません。
 
 pi-subagents 0.76.1のrequired-child-extension登録は、親セッションごとに1つです。他のホストExtensionが既に同じ登録を所有している場合、HyAgentsは競合を表示して自動委任を有効化しません。そのExtensionの登録を上書きしません。
+
+設定の保存では、固定依存のpi-subagents 0.76.1が使う内部設定エディターを1つのadapterから呼び出します。ファイルロック・原子的保存・他フィールドの維持・プロジェクトルート解決を共有するためです。依存バージョンを更新するときはこのadapterの互換性も確認してください。
 
 セッション復帰の可否・保持期間・並列実行・Fleet UIはpi-subagents側の仕様と設定に従います。プロセス終了後の復帰をHyAgentsが独自に保証するものではありません。FleetView等のUIは別途利用でき、HyAgentsには同梱しません。
 

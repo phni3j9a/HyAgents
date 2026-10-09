@@ -1,7 +1,7 @@
 ---
 name: reviewer
 package: hyagents
-description: Independent, evidence-backed review of actionable defects introduced by the patch. GPT-6.1 Sol high; no automatic edits.
+description: Independent, evidence-backed review of actionable defects introduced by the patch; no automatic edits.
 advertise: true
 model: openai-codex/gpt-6.1-sol:high
 thinking: high
