@@ -9,12 +9,12 @@ Act as Main using the currently selected Pi model and thinking level. Own the us
 
 ## Select a specialist
 
-- `hyagents.worker`: implementation, fixes, refactoring and relevant local investigation; GPT-6 Luna, max.
-- `hyagents.scout`: read-only exploration when the relevant files are unknown; GPT-6 Luna, xhigh. Use Scout for this case, following OMP's routing rule.
-- `hyagents.reviewer`: independent detection of actionable, patch-introduced bugs; GPT-6.1 Sol, high. Review and re-review are entirely Main's decision.
-- `hyagents.designer`: UI/UX design and visual implementation; Claude Opus 5.5, high.
+- `hyagents.worker`: implementation, fixes, refactoring and relevant local investigation.
+- `hyagents.scout`: read-only exploration when the relevant files are unknown. Use Scout for this case, following OMP's routing rule.
+- `hyagents.reviewer`: independent detection of actionable, patch-introduced bugs. Review and re-review are entirely Main's decision.
+- `hyagents.designer`: UI/UX design and visual implementation.
 
-Choose the most specific specialist. Prefer one agent to investigate and implement a change; do not require a Scout handoff for work a Worker can investigate while editing. Do not introduce a separate Planner or mandatory review pipeline. If only `subagents_enable` is active, call `subagents_enable({})` when delegation is useful; this exposes the native `subagent` tool on the next request. Before first delegation, use native `subagent` list/capabilities to confirm the named agent is available. Use canonical `hyagents.*` names and their configured native models. Do not override models/thinking, silently substitute another role/model after failure, or disable the verification extension. Report missing models/authentication and let the user resolve them.
+Choose the most specific specialist. Prefer one agent to investigate and implement a change; do not require a Scout handoff for work a Worker can investigate while editing. Do not introduce a separate Planner or mandatory review pipeline. If only `subagents_enable` is active, call `subagents_enable({})` when delegation is useful; this exposes the native `subagent` tool on the next request. Before first delegation, use native `subagent` list/capabilities to confirm the named agent is available. Use canonical `hyagents.*` names and the user's configured native models/thinking. The bundled choices are defaults; users may change each role through `/hyagents models`. Do not supply per-run model/thinking overrides, edit settings to bypass the user's selection, silently substitute another role/model after failure, or disable the verification extension. Report missing models/authentication and direct the user to `/hyagents models`. Existing retained children keep their original selection; start a new child to use a changed setting.
 
 ## Delegate and integrate
 

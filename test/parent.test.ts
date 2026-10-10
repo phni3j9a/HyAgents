@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-test("real Pi loads both packages, bootstraps deferred delegation, and rejects an incorrect child launch", async () => {
+test("real Pi loads both packages, enforces selection, and saves models through its registered command", async () => {
   const fixture = mkdtempSync(path.join(tmpdir(), "hyagents-parent-"));
   const agentDir = path.join(fixture, "agent");
   mkdirSync(agentDir);
@@ -47,6 +47,33 @@ test("real Pi loads both packages, bootstraps deferred delegation, and rejects a
     assert.match(JSON.stringify(parallel), /hyagents.worker requires/);
     assert.match(JSON.stringify(parallel), /hyagents.scout requires/);
     assert.deepEqual(errors, []);
+
+    // Exercise the command loaded by Pi's real extension loader, including its
+    // dynamic import of the native settings editor. Dialog answers replace user
+    // interaction; only this offline fixture pretends models are authenticated.
+    const command = session.extensionRunner.getCommand("hyagents");
+    assert.ok(command);
+    const commandCtx = { ...session.extensionRunner.createCommandContext(), hasUI: true };
+    const answers = ["openai-codex", "gpt-6-luna", "high", "User — all projects"];
+    const notices: { text: string; type?: string }[] = [];
+    commandCtx.modelRegistry.getAvailable = () => commandCtx.modelRegistry.getAll();
+    commandCtx.ui = { ...commandCtx.ui,
+      select: async (_title, options) => {
+        const answer = answers.shift()!;
+        assert.ok(options.includes(answer));
+        return answer;
+      },
+      notify: (text, type) => notices.push({ text, type }),
+    };
+    await command.handler("models worker", commandCtx);
+    assert.equal(answers.length, 0);
+    assert.equal(notices.at(-1)?.type, "info", JSON.stringify(notices));
+    const saved = JSON.parse(readFileSync(path.join(agentDir, "settings.json"), "utf8"));
+    assert.equal(saved.subagents.agentOverrides["hyagents.worker"].model, "openai-codex/gpt-6-luna:high");
+    assert.equal(session.model?.id, "gpt-6.1-sol");
+    assert.equal(session.thinkingLevel, "low");
+    await command.handler("", commandCtx);
+    assert.match(notices.at(-1)!.text, /hyagents.worker: openai-codex\/gpt-6-luna:high/);
   } finally {
     if (session) {
       await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });

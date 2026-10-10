@@ -1,7 +1,7 @@
 ---
 name: designer
 package: hyagents
-description: UI/UX design and visual implementation, including screens and components. Claude Opus 5.5 high.
+description: UI/UX design and visual implementation, including screens and components.
 advertise: true
 model: anthropic/claude-opus-5-5:high
 thinking: high

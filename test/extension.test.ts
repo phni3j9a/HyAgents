@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { after, test } from "node:test";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getModels } from "@earendil-works/pi-ai/compat";
 import hyagents from "../extensions/hyagents.ts";
 import { ROLES } from "../src/models.ts";
+
+const fixture = mkdtempSync(path.join(tmpdir(), "hyagents-extension-"));
+const agentDir = path.join(fixture, "agent");
+mkdirSync(agentDir);
+process.env.PI_CODING_AGENT_DIR = agentDir;
+writeFileSync(path.join(agentDir, "settings.json"), JSON.stringify({ packages: [fileURLToPath(new URL("../", import.meta.url))] }));
+after(() => rmSync(fixture, { recursive: true, force: true }));
 
 function harness() {
   const handlers = new Map<string, (...args: any[]) => any>();
@@ -16,12 +27,15 @@ function harness() {
     getAllTools: () => [{ name: "subagent" }],
   } as unknown as ExtensionAPI;
   const ctx = {
+    cwd: fixture,
+    isProjectTrusted: () => true,
     getSystemPrompt: () => "You are Pi Main.",
     sessionManager: { getSessionId: () => crypto.randomUUID() },
     ui: { notify: (text: string) => notifications.push(text) },
     modelRegistry: {
       find: (provider: string, id: string) => models.find((model) => model.provider === provider && model.id === id),
       getAvailable: () => models,
+      getAll: () => models,
     },
   } as unknown as ExtensionContext;
   hyagents(pi);
