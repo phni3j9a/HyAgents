@@ -1,12 +1,12 @@
 {
-  "name": "hyagents",
+  "name": "pi-hybrid-subagents",
   "version": "0.3.0",
-  "description": "Lightweight, OMP-inspired specialist agents for Pi",
+  "description": "Hybrid Subagents for Pi: role-based, multi-model specialists powered by pi-subagents",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/phni3j9a/HyAgents.git"
+    "url": "git+https://github.com/phni3j9a/hybrid-subagents.git"
   },
   "keywords": [
     "pi-package",

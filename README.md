@@ -1,6 +1,10 @@
-# HyAgents
+# Hybrid Subagents
 
-通常のPiをMainにして、4種類の専門Agentを必要に応じて使い分ける軽量パッケージです。OMPの委任・レビュー方針を参考にし、起動、並列実行、結果回収、セッション継続は **pi-subagents** に任せます。
+役割ごとに異なるモデル・プロバイダーを組み合わせて使う専門Agent集です。このリポジトリは将来のherdr等への展開も見据えて `hybrid-subagents` とし、現在提供するPi向けパッケージは **`pi-hybrid-subagents`** です。herdr向けの実装はまだ含みません。
+
+Pi版は、通常のPiをMainにして、4種類の専門Agentを必要に応じて使い分ける軽量パッケージです。OMPの委任・レビュー方針を参考にし、起動、並列実行、結果回収、セッション継続は **pi-subagents** に任せます。
+
+旧称はHyAgentsです。既存設定・保持セッションとの互換性のため、コマンド `/hyagents`、Agent名 `hyagents.*`、Skill名 `hyagents`、設定ファイル `hyagents.json` と内部の保存キーは維持します。改名に伴う設定の移行は不要です。
 
 ## Agent構成
 
@@ -30,23 +34,23 @@ npm install -g @earendil-works/pi-coding-agent@1.1.0
 
 ```sh
 pi install npm:pi-subagents@0.76.1
-pi install npm:hyagents
+pi install npm:pi-hybrid-subagents
 ```
 
-未公開の最新版を試す場合は、`npm:hyagents` の代わりに `git:github.com/phni3j9a/HyAgents` を指定します。Pi 1.2では、HyAgentsだけを更新する場合は `pi update npm:hyagents`、全パッケージを更新する場合は `pi update --extensions` を使います（`pi update` 単独はPi本体の更新です）。
+未公開の最新版を試す場合は、`npm:pi-hybrid-subagents` の代わりに `git:github.com/phni3j9a/hybrid-subagents` を指定します。Pi 1.2では、Hybrid Subagentsだけを更新する場合は `pi update npm:pi-hybrid-subagents`、全パッケージを更新する場合は `pi update --extensions` を使います（`pi update` 単独はPi本体の更新です）。
 
-GitHub版からnpm版へ切り替える場合は、二重に読み込まれないよう、先にGitHub版の登録を外してください。モデル・Thinking・Fastの保存済み設定はそのまま使えます。
+旧リポジトリ名で導入したGitHub版からnpm版へ切り替える場合は、二重に読み込まれないよう、先に元のソース指定で登録を外してください。モデル・Thinking・Fastの保存済み設定はそのまま使えます。
 
 ```sh
 pi remove git:github.com/phni3j9a/HyAgents
-pi install npm:hyagents
+pi install npm:pi-hybrid-subagents
 ```
 
 起動中なら `/reload`、そうでなければ通常どおり `pi` を起動します。**毎回 `/hyagents` やSkillを呼び出す必要はありません。** 4つのAgentはパッケージのmanifestから発見され、Mainへ委任方針が自動適用されます。
 
-`pi-subagents` はHyAgentsの依存パッケージにも含まれますが、これは公開の起動検証APIを読み込むためです。依存関係のインストールだけでは `subagent` ツールが有効にならないため、上記の `pi install npm:pi-subagents@0.76.1` も必要です。二重にExtensionを読み込ませる必要はありません。
+`pi-subagents` はHybrid Subagentsの依存パッケージにも含まれますが、これは公開の起動検証APIを読み込むためです。依存関係のインストールだけでは `subagent` ツールが有効にならないため、上記の `pi install npm:pi-subagents@0.76.1` も必要です。二重にExtensionを読み込ませる必要はありません。
 
-各プロバイダーの認証はPiの通常の方法で設定してください。HyAgentsは認証情報を管理しません。モデル設定はユーザーが保存操作を行った場合にだけ更新します。
+各プロバイダーの認証はPiの通常の方法で設定してください。Hybrid Subagentsは認証情報を管理しません。モデル設定はユーザーが保存操作を行った場合にだけ更新します。
 
 確認用コマンド:
 
@@ -105,7 +109,7 @@ Scout／Reviewerの非編集方針はプロンプトによる役割定義です�
 OpenAI系プロバイダー（`openai`、`openai-codex`）のモデルを選ぶと、Fastモードのon/offを選べます。onの子Agentは、プロバイダーへのリクエストに `service_tier: "priority"` を付けます。処理は速くなる一方、利用枠・費用の消費が増えます（Piの料金計算では通常の約2倍、gpt-5.5は2.5倍）。Sign in with ChatGPT利用時に優先処理がどの程度効くかはOpenAI側の扱いに依存します。
 
 - Anthropicなど他のプロバイダーでは選択肢を表示せず、offとして保存します。手動設定で非対応プロバイダーにFastを有効にした場合、子Agentは起動時に停止します。
-- pi-subagentsネイティブの `fast: true` は `openai-codex/*` 専用で、Pi 1.2以降のSign in with ChatGPT（`openai` プロバイダー）では使えないため、HyAgentsは独自に適用します。ネイティブの `fast` は変更しません。
+- pi-subagentsネイティブの `fast: true` は `openai-codex/*` 専用で、Pi 1.2以降のSign in with ChatGPT（`openai` プロバイダー）では使えないため、Hybrid Subagentsは独自に適用します。ネイティブの `fast` は変更しません。
 - 保持セッションは、モデルと同様に起動時のFast選択を維持します。Fast対応前に作成した保持セッションはoffとして扱います。
 
 モデル・Thinkingの保存先はpi-subagents標準の `subagents.agentOverrides` です。Fastは同じディレクトリの `hyagents.json`（ユーザー: `~/.pi/agent/hyagents.json`、プロジェクト: `.pi/hyagents.json`）に `{ "fast": { "hyagents.worker": true } }` の形で保存し、プロジェクト設定が優先されます（未信頼プロジェクトでは無視）。pi-subagentsの設定エディターは未知のoverride項目を書き込まないため、別ファイルにしています。ユーザー設定は通常 `~/.pi/agent/settings.json`、プロジェクト設定はpi-subagentsが解決するプロジェクトの `.pi/settings.json` です。設定ルートがない場合、プロジェクト保存時に現在のディレクトリへ `.pi` を作成します。パッケージ内のAgent定義を直接編集する必要はありません。
@@ -133,7 +137,7 @@ MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検�
 
 通常の `subagent`、ネイティブworkflow、`/run` が対象です。保持セッション用の選択はPi標準のcustom entryに記録し、独自のセッションファイルやCheckpointは作りません。v0.1で作成した保持セッションには記録がないため、初回再開時に現在の設定と照合します。不一致なら新しい子Agentを開始してください。
 
-既存の `subagents.modelScope` や `maxThinking` は維持します。起動が拒否されても制約を自動で緩めません。HyAgentsではプロバイダーを含む明示的な役割設定を使い、Main依存の `model: inherit` や競合する `agentOverridesByProvider` は対象外です。後者は `/hyagents` で診断します。`hyagents.*` を外部CLI／リモート実行用Agentで上書きする運用も対象外です。この照合は任意の信頼済みExtensionに対するセキュリティ境界ではありません。
+既存の `subagents.modelScope` や `maxThinking` は維持します。起動が拒否されても制約を自動で緩めません。Hybrid Subagentsではプロバイダーを含む明示的な役割設定を使い、Main依存の `model: inherit` や競合する `agentOverridesByProvider` は対象外です。後者は `/hyagents` で診断します。`hyagents.*` を外部CLI／リモート実行用Agentで上書きする運用も対象外です。この照合は任意の信頼済みExtensionに対するセキュリティ境界ではありません。
 
 ## Reviewerの出力
 
@@ -165,19 +169,19 @@ MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検�
 
 Mainへの適用にはPiの構造化prompt sectionを使い、他のExtensionの指示やprompt cacheを維持します。子AgentへMain用ポリシーを再注入しません。組み込みの `worker`、`scout`、`reviewer` は上書きしません。
 
-pi-subagents 0.76.1のrequired-child-extension登録は、親セッションごとに1つです。他のホストExtensionが既に同じ登録を所有している場合、HyAgentsは競合を表示して自動委任を有効化しません。そのExtensionの登録を上書きしません。
+pi-subagents 0.76.1のrequired-child-extension登録は、親セッションごとに1つです。他のホストExtensionが既に同じ登録を所有している場合、Hybrid Subagentsは競合を表示して自動委任を有効化しません。そのExtensionの登録を上書きしません。
 
 設定の保存では、固定依存のpi-subagents 0.76.1が使う内部設定エディターを1つのadapterから呼び出します。ファイルロック・原子的保存・他フィールドの維持・プロジェクトルート解決を共有するためです。依存バージョンを更新するときはこのadapterの互換性も確認してください。
 
-セッション復帰の可否・保持期間・並列実行・Fleet UIはpi-subagents側の仕様と設定に従います。プロセス終了後の復帰をHyAgentsが独自に保証するものではありません。FleetView等のUIは別途利用でき、HyAgentsには同梱しません。
+セッション復帰の可否・保持期間・並列実行・Fleet UIはpi-subagents側の仕様と設定に従います。プロセス終了後の復帰をHybrid Subagentsが独自に保証するものではありません。FleetView等のUIは別途利用でき、Hybrid Subagentsには同梱しません。
 
 アンインストール:
 
 ```sh
-pi remove npm:hyagents
+pi remove npm:pi-hybrid-subagents
 ```
 
-GitHubから導入した場合は `pi remove git:github.com/phni3j9a/HyAgents` です。
+GitHubから導入した場合は `pi remove git:github.com/phni3j9a/hybrid-subagents` です。旧名で登録した場合は `pi remove git:github.com/phni3j9a/HyAgents` を使ってください。GitHubの旧URLは新URLへリダイレクトされますが、Piの登録ソース文字列は自動で変わりません。
 
 その後 `/reload` またはPiを再起動します。pi-subagentsは他の用途に引き続き使えます。
 

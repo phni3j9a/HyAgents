@@ -23,7 +23,7 @@ export default function verifyChild(pi: ExtensionAPI): void {
     if (saved?.type === "custom") {
       const data = saved.data as { agent?: unknown; model?: unknown; fast?: unknown } | undefined;
       if (data?.agent !== name || typeof data.model !== "string" || (data.fast !== undefined && typeof data.fast !== "boolean")) {
-        throw new Error("HyAgents: invalid retained model selection.");
+        throw new Error("Hybrid Subagents: invalid retained model selection.");
       }
       required = parseSelection(data.model);
       // Entries written before Fast mode existed ran at the standard tier.

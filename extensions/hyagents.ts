@@ -56,7 +56,7 @@ export default function hyagents(pi: ExtensionAPI): void {
         extensions: [{ id: "hyagents.models", path: childGuardPath }],
       });
     } catch (error) {
-      registrationError = `HyAgents model verification unavailable: ${error instanceof Error ? error.message : String(error)}`;
+      registrationError = `Hybrid Subagents model verification unavailable: ${error instanceof Error ? error.message : String(error)}`;
     }
     const { issues } = await diagnostics(ctx);
     if (issues.length) ctx.ui.notify(issues.join("\n"), "warning");
@@ -68,20 +68,20 @@ export default function hyagents(pi: ExtensionAPI): void {
     // Keep Pi's structured prompt and other extensions' sections (and prompt caching).
     event.systemPromptOptions.sections.hyagents = registration
       ? policy
-      : "HyAgents is unavailable because child model verification could not be registered. Report the startup error; do not launch HyAgents agents until it is resolved.";
+      : "Hybrid Subagents is unavailable because child model verification could not be registered. Report the startup error; do not launch Hybrid Subagents agents until it is resolved.";
   });
 
   pi.on("tool_call", (event) => {
     if (event.toolName !== "subagent") return;
     const name = event.input.agent;
     if (typeof name !== "string" || !Object.hasOwn(ROLES, name)) return;
-    if (!registration && !event.input.action) return { block: true, reason: registrationError ?? "HyAgents model verification is not active; reload Pi." };
+    if (!registration && !event.input.action) return { block: true, reason: registrationError ?? "Hybrid Subagents model verification is not active; reload Pi." };
     // Native startup validation also covers workflows, /run, settings overrides and resume.
     // Do not intercept management calls or change the native tool arguments.
   });
 
   pi.registerCommand("hyagents", {
-    description: "Show HyAgents readiness, or choose role models with /hyagents models",
+    description: "Show Hybrid Subagents readiness, or choose role models with /hyagents models",
     getArgumentCompletions: modelCompletions,
     handler: async (args, ctx) => {
       try {

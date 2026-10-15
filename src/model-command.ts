@@ -41,7 +41,7 @@ export async function modelCommand(args: string, ctx: ExtensionCommandContext): 
   if (target === "reset") {
     const scope = await chooseScope(ctx);
     if (!scope) return;
-    if (!await ctx.ui.confirm("Restore HyAgents defaults?", `${ROLE_NAMES.map((name) => `${name}: ${modelSpec(name)}`).join("\n")}\nFast mode: off for all roles.\n\nSave to ${scope} settings. Other agent settings are preserved.`)) return;
+    if (!await ctx.ui.confirm("Restore Hybrid Subagents defaults?", `${ROLE_NAMES.map((name) => `${name}: ${modelSpec(name)}`).join("\n")}\nFast mode: off for all roles.\n\nSave to ${scope} settings. Other agent settings are preserved.`)) return;
     for (const name of ROLE_NAMES) {
       const file = await saveSelection(ctx.cwd, name, ROLES[name], scope, false);
       await reportSaved(name, ROLES[name], false, file, ctx);
@@ -55,7 +55,7 @@ export async function modelCommand(args: string, ctx: ExtensionCommandContext): 
       try { return `${role.slice(9)} — ${describeSelection(await configuredSelection(role, ctx), await configuredFast(role, ctx))}`; }
       catch { return `${role.slice(9)} — configuration needs attention`; }
     }));
-    const chosen = await ctx.ui.select("HyAgents models", labels);
+    const chosen = await ctx.ui.select("Hybrid Subagents models", labels);
     if (!chosen) return;
     name = ROLE_NAMES[labels.indexOf(chosen)];
   }
