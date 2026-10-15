@@ -30,7 +30,16 @@ npm install -g @earendil-works/pi-coding-agent@1.1.0
 
 ```sh
 pi install npm:pi-subagents@0.76.1
-pi install git:github.com/phni3j9a/HyAgents
+pi install npm:hyagents
+```
+
+未公開の最新版を試す場合は、`npm:hyagents` の代わりに `git:github.com/phni3j9a/HyAgents` を指定します。Pi 1.2では、HyAgentsだけを更新する場合は `pi update npm:hyagents`、全パッケージを更新する場合は `pi update --extensions` を使います（`pi update` 単独はPi本体の更新です）。
+
+GitHub版からnpm版へ切り替える場合は、二重に読み込まれないよう、先にGitHub版の登録を外してください。モデル・Thinking・Fastの保存済み設定はそのまま使えます。
+
+```sh
+pi remove git:github.com/phni3j9a/HyAgents
+pi install npm:hyagents
 ```
 
 起動中なら `/reload`、そうでなければ通常どおり `pi` を起動します。**毎回 `/hyagents` やSkillを呼び出す必要はありません。** 4つのAgentはパッケージのmanifestから発見され、Mainへ委任方針が自動適用されます。
@@ -165,8 +174,10 @@ pi-subagents 0.76.1のrequired-child-extension登録は、親セッションご�
 アンインストール:
 
 ```sh
-pi remove git:github.com/phni3j9a/HyAgents
+pi remove npm:hyagents
 ```
+
+GitHubから導入した場合は `pi remove git:github.com/phni3j9a/HyAgents` です。
 
 その後 `/reload` またはPiを再起動します。pi-subagentsは他の用途に引き続き使えます。
 
