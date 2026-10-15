@@ -143,6 +143,25 @@ test("malformed settings are not overwritten", async () => {
   const h = ui(["openai-codex", "gpt-6.1-sol", "low", OFF, "User — all projects"]);
   await assert.rejects(modelCommand("worker", h.ctx), /parse settings/);
   assert.equal(readFileSync(settingsPath, "utf8"), "{broken json");
+  assert.equal(existsSync(fastPath), false, "Fast file rolled back when the native write fails");
+  writeFileSync(fastPath, JSON.stringify({ fast: { "hyagents.scout": true } }));
+  await assert.rejects(modelCommand("worker", ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]).ctx), /parse settings/);
+  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.scout": true } }, "previous Fast file restored");
+});
+
+test("malformed Fast settings stop the save before the model selection changes", async () => {
+  writeFileSync(fastPath, "{broken json");
+  const original = readFileSync(settingsPath, "utf8");
+  await assert.rejects(modelCommand("worker", ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]).ctx), /failed to parse/);
+  assert.equal(readFileSync(settingsPath, "utf8"), original);
+  assert.equal(readFileSync(fastPath, "utf8"), "{broken json");
+});
+
+test("Fast saves for different roles are merged, not replaced", async () => {
+  const selection = { provider: "openai-codex", id: "gpt-6-luna", thinking: "high" as const };
+  await saveSelection(cwd, "hyagents.worker", selection, "user", true);
+  await saveSelection(cwd, "hyagents.scout", selection, "user", false);
+  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.worker": true, "hyagents.scout": false } });
 });
 
 test("Fast mode is offered only for OpenAI providers, saved explicitly and shown in the role menu", async () => {

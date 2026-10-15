@@ -24,20 +24,27 @@ function read(file: string): FastFile {
   return parsed as FastFile;
 }
 
-/** Write an explicit boolean so a project choice can turn off a user-level Fast setting. */
-export function saveFast(dir: string, name: RoleName, fast: boolean): string {
-  const file = path.join(dir, FAST_FILE);
-  const current = read(file);
-  const next = { ...current, fast: { ...current.fast, [name]: fast } };
-  mkdirSync(dir, { recursive: true });
+/** Validated contents of a Fast file, or undefined when it does not exist. Throws before any write. */
+export function readFastFile(file: string): FastFile | undefined {
+  return existsSync(file) ? read(file) : undefined;
+}
+
+/** Atomically replace (or, for `undefined`, remove) a Fast file. Callers hold the file lease. */
+export function writeFastFile(file: string, contents: FastFile | undefined): void {
+  if (contents === undefined) { rmSync(file, { force: true }); return; }
+  mkdirSync(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
   try {
-    writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`);
+    writeFileSync(temp, `${JSON.stringify(contents, null, 2)}\n`);
     renameSync(temp, file);
   } finally {
     rmSync(temp, { force: true });
   }
-  return file;
+}
+
+/** Write an explicit boolean so a project choice can turn off a user-level Fast setting. */
+export function withFast(current: FastFile | undefined, name: RoleName, fast: boolean): FastFile {
+  return { ...current, fast: { ...current?.fast, [name]: fast } };
 }
 
 /** Same user < project precedence as the native agentOverrides; untrusted projects are ignored. */
