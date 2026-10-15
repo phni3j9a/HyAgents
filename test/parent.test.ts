@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-test("real Pi loads both packages, enforces selection, and saves models through its registered command", async () => {
+test("real Pi loads both packages without a child guard and saves models through its registered command", async () => {
   const fixture = mkdtempSync(path.join(tmpdir(), "hyagents-parent-"));
   const agentDir = path.join(fixture, "agent");
   mkdirSync(agentDir);
@@ -29,24 +29,22 @@ test("real Pi loads both packages, enforces selection, and saves models through 
     await session.bindExtensions({ mode: "print", onError: (error) => errors.push(error.error) });
     assert.deepEqual(errors, []);
     assert.ok(session.getActiveToolNames().includes("subagents_enable"));
-    const ctx = session.extensionRunner.createContext();
-    const prompt = await session.extensionRunner.emitBeforeAgentStart("Investigate and implement the feature", undefined, { cwd: fixture, selectedTools: session.getActiveToolNames() });
+    const options = { cwd: fixture, selectedTools: session.getActiveToolNames() };
+    const emit = session.extensionRunner.emitBeforeAgentStart;
+    // Pi 1.2 replaced the 1.1 (prompt, images, options) test entry point with (trigger, options).
+    const prompt = await Reflect.apply(emit, session.extensionRunner, emit.length === 3
+      ? ["Investigate and implement the feature", undefined, options]
+      : [{ messageType: "user", prompt: "Investigate and implement the feature", images: undefined }, options]);
     assert.match(prompt.systemPromptOptions.sections.hyagents ?? "", /subagents_enable/);
     assert.equal(session.model?.id, "gpt-6.1-sol");
     assert.equal(session.thinkingLevel, "low");
     const tool = session.getToolDefinition("subagent");
     assert.ok(tool);
-    const toolContext = { ...ctx, tools: [], executeTool: async () => { throw new Error("No nested tool execution expected"); } };
-    await assert.rejects(tool.execute("hyagents-wrong-thinking", { agent: "hyagents.worker", task: "Reply with a short result.", model: "openai-codex/gpt-6-luna:low", async: false }, undefined, undefined, toolContext), /Hybrid Subagents:.*requires/);
-    const workflowPath = path.join(fixture, "parallel.js");
-    writeFileSync(workflowPath, `return await runs.all([
-      { key: "writer", agent: "hyagents.worker", task: "Inspect assigned code.", model: "openai-codex/gpt-6-luna:low", async: false },
-      { key: "scout", agent: "hyagents.scout", task: "Find relevant code.", model: "openai-codex/gpt-6-luna:high", async: false }
-    ]);`);
-    const parallel = await tool.execute("hyagents-parallel", { workflow: workflowPath, async: false }, undefined, undefined, toolContext).catch((error: Error) => ({ error: error.message }));
-    assert.match(JSON.stringify(parallel), /hyagents.worker requires/);
-    assert.match(JSON.stringify(parallel), /hyagents.scout requires/);
-    assert.deepEqual(errors, []);
+    const { resolveSubagentLaunchContract } = await import("pi-subagents/preflight");
+    const override = await resolveSubagentLaunchContract({ agent: "hyagents.worker", cwd: fixture, parentSessionId: session.sessionId, model: "openai-codex/gpt-6-luna:low" });
+    assert.ok(override.ok);
+    assert.equal(override.contract.thinking, "low");
+    assert.ok(!override.contract.tools.requiredExtensionIds.includes("hyagents.models"));
 
     // Exercise the command loaded by Pi's real extension loader, including its
     // dynamic import of the native settings editor. Dialog answers replace user
@@ -70,7 +68,7 @@ test("real Pi loads both packages, enforces selection, and saves models through 
     assert.equal(notices.at(-1)?.type, "info", JSON.stringify(notices));
     const saved = JSON.parse(readFileSync(path.join(agentDir, "settings.json"), "utf8"));
     assert.equal(saved.subagents.agentOverrides["hyagents.worker"].model, "openai-codex/gpt-6-luna:high");
-    assert.deepEqual(JSON.parse(readFileSync(path.join(agentDir, "hyagents.json"), "utf8")), { fast: { "hyagents.worker": true } });
+    assert.equal(saved.subagents.agentOverrides["hyagents.worker"].fast, true);
     assert.equal(session.model?.id, "gpt-6.1-sol");
     assert.equal(session.thinkingLevel, "low");
     await command.handler("", commandCtx);

@@ -62,7 +62,7 @@ test("role picker saves a different model and lower thinking to native settings,
   assert.equal(saved.theme, "dark");
   assert.deepEqual(saved.subagents.agentOverrides.unrelated, base.subagents.agentOverrides.unrelated);
   assert.deepEqual(saved.subagents.agentOverrides["hyagents.worker"], { tools: ["read", "edit"], fast: false, model: "openai-codex/gpt-6.1-sol:low", thinking: "low" });
-  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.worker": false } });
+  assert.equal(existsSync(fastPath), false);
   assert.equal(modelSpec(await configuredSelection("hyagents.worker", h.ctx)), "openai-codex/gpt-6.1-sol:low");
   assert.match(h.notifications.at(-1)!.text, /Applies to new children/);
   assert.equal(h.notifications.at(-1)!.type, "info");
@@ -77,7 +77,7 @@ test("top-level menu shows effective choices and edits the selected role", async
 
 test("non-reasoning models offer only off, and off is saved explicitly", async () => {
   const model = models.find((item) => !item.reasoning)!;
-  const h = ui([model.provider, model.id, "off", OFF, "User — all projects"]);
+  const h = ui([model.provider, model.id, "off", "User — all projects"]);
   await modelCommand("hyagents.worker", h.ctx);
   assert.deepEqual(h.dialogs[2].options, getSupportedThinkingLevels(model));
   assert.equal((await configuredSelection("hyagents.worker", h.ctx)).thinking, "off");
@@ -143,17 +143,17 @@ test("malformed settings are not overwritten", async () => {
   const h = ui(["openai-codex", "gpt-6.1-sol", "low", OFF, "User — all projects"]);
   await assert.rejects(modelCommand("worker", h.ctx), /parse settings/);
   assert.equal(readFileSync(settingsPath, "utf8"), "{broken json");
-  assert.equal(existsSync(fastPath), false, "Fast file rolled back when the native write fails");
+  assert.equal(existsSync(fastPath), false, "No legacy Fast file is created");
   writeFileSync(fastPath, JSON.stringify({ fast: { "hyagents.scout": true } }));
   await assert.rejects(modelCommand("worker", ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]).ctx), /parse settings/);
-  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.scout": true } }, "previous Fast file restored");
+  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.scout": true } }, "Legacy Fast file is untouched");
 });
 
-test("malformed Fast settings stop the save before the model selection changes", async () => {
+test("legacy Fast files are ignored and never modified, even when malformed", async () => {
   writeFileSync(fastPath, "{broken json");
-  const original = readFileSync(settingsPath, "utf8");
-  await assert.rejects(modelCommand("worker", ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]).ctx), /failed to parse/);
-  assert.equal(readFileSync(settingsPath, "utf8"), original);
+  const h = ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]);
+  await modelCommand("worker", h.ctx);
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), true);
   assert.equal(readFileSync(fastPath, "utf8"), "{broken json");
 });
 
@@ -161,14 +161,16 @@ test("Fast saves for different roles are merged, not replaced", async () => {
   const selection = { provider: "openai-codex", id: "gpt-6-luna", thinking: "high" as const };
   await saveSelection(cwd, "hyagents.worker", selection, "user", true);
   await saveSelection(cwd, "hyagents.scout", selection, "user", false);
-  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.worker": true, "hyagents.scout": false } });
+  const overrides = JSON.parse(readFileSync(settingsPath, "utf8")).subagents.agentOverrides;
+  assert.equal(overrides["hyagents.worker"].fast, true);
+  assert.equal(overrides["hyagents.scout"].fast, false);
 });
 
-test("Fast mode is offered only for OpenAI providers, saved explicitly and shown in the role menu", async () => {
+test("Fast mode is offered only for the legacy openai-codex provider, saved explicitly and shown in the role menu", async () => {
   const h = ui(["openai-codex", "gpt-6-luna", "high", ON, "User — all projects"]);
   await modelCommand("worker", h.ctx);
   assert.deepEqual(h.dialogs[3], { title: "hyagents.worker — fast mode", options: [OFF, ON] });
-  assert.equal(JSON.parse(readFileSync(fastPath, "utf8")).fast["hyagents.worker"], true);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).subagents.agentOverrides["hyagents.worker"].fast, true);
   assert.equal(await configuredFast("hyagents.worker", h.ctx), true);
   assert.match(h.notifications.at(-1)!.text, /saved openai-codex\/gpt-6-luna:high fast/);
   const menu = ui([undefined]);
@@ -178,7 +180,18 @@ test("Fast mode is offered only for OpenAI providers, saved explicitly and shown
   await modelCommand("worker", anthropic.ctx);
   assert.ok(!anthropic.dialogs.some((dialog) => dialog.title.endsWith("fast mode")));
   assert.equal(await configuredFast("hyagents.worker", anthropic.ctx), false);
-  assert.equal(JSON.parse(readFileSync(fastPath, "utf8")).fast["hyagents.worker"], false);
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).subagents.agentOverrides["hyagents.worker"].fast, false);
+});
+
+test("openai skips Fast and clears a previous native Fast choice", async () => {
+  await saveSelection(cwd, "hyagents.worker", ROLES["hyagents.worker"], "user", true);
+  const model = models.find((item) => item.provider === "openai")!;
+  const h = ui([model.provider, model.id, "off", "User — all projects"]);
+  await modelCommand("worker", h.ctx);
+  assert.ok(!h.dialogs.some((dialog) => dialog.title.endsWith("fast mode")));
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), false);
+  assert.ok(h.notifications.some(({ text }) => text.includes("legacy openai-codex")));
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).subagents.agentOverrides["hyagents.worker"].fast, false);
 });
 
 test("project Fast choice overrides the user choice; reset turns Fast off", async () => {
@@ -191,11 +204,21 @@ test("project Fast choice overrides the user choice; reset turns Fast off", asyn
   h.ctx.isProjectTrusted = () => false;
   assert.equal(await configuredFast("hyagents.worker", h.ctx), true, "untrusted project settings are ignored");
   await saveSelection(cwd, "hyagents.worker", { provider: "anthropic", id: "claude-opus-5-5", thinking: "high" }, "user", true);
-  assert.equal(JSON.parse(readFileSync(fastPath, "utf8")).fast["hyagents.worker"], false, "unsupported providers never save Fast");
+  assert.equal(JSON.parse(readFileSync(settingsPath, "utf8")).subagents.agentOverrides["hyagents.worker"].fast, false, "unsupported providers never save Fast");
   rmSync(path.join(cwd, ".pi"), { recursive: true, force: true });
   await saveSelection(cwd, "hyagents.scout", selection, "user", true);
   await modelCommand("reset", ui(["User — all projects"]).ctx);
   assert.equal(await configuredFast("hyagents.scout", ui([]).ctx), false);
+});
+
+test("provider-scoped native choices are displayed instead of rejected by a custom guard", async () => {
+  const h = ui([]);
+  h.ctx.model = models.find((model) => model.provider === "anthropic")!;
+  writeFileSync(settingsPath, JSON.stringify({ ...base, subagents: { ...base.subagents, agentOverridesByProvider: {
+    anthropic: { "hyagents.worker": { model: "openai-codex/gpt-6.1-sol:low", thinking: "low", fast: true } },
+  } } }));
+  assert.equal(modelSpec(await configuredSelection("hyagents.worker", h.ctx)), "openai-codex/gpt-6.1-sol:low");
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), true);
 });
 
 test("slash completions expose model selection, roles and reset", () => {

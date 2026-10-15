@@ -54,7 +54,7 @@ test("automatically applies policy on every Main turn without replacing other pr
       assert.match(event.systemPromptOptions.sections.hyagents, /entirely Main's decision/);
     }
     assert.equal(h.notifications.length, 0);
-  } finally { h.handlers.get("session_shutdown")!(); }
+  } finally { h.handlers.get("session_shutdown")?.(); }
 });
 
 test("no Main policy when the subagent tool is disabled or in a child prompt", () => {
@@ -66,14 +66,21 @@ test("no Main policy when the subagent tool is disabled or in a child prompt", (
   }
 });
 
-test("repeated start/reload/shutdown disposes the native registration", async () => {
+test("another host owns required child extensions without blocking policy or startup", async () => {
   const h = harness();
   (h.ctx.sessionManager as any).getSessionId = () => "reload-test";
+  const { registerRequiredChildExtensions } = await import("pi-subagents/required-child-extensions");
+  writeFileSync(path.join(fixture, "other.ts"), "export default function() {};");
+  const owner = registerRequiredChildExtensions({ sessionId: "reload-test", extensions: [{ id: "other.host", path: path.join(fixture, "other.ts") }] });
   try {
     await h.handlers.get("session_start")!({}, h.ctx);
     await h.handlers.get("session_start")!({}, h.ctx);
+    assert.equal(h.handlers.has("tool_call"), false);
+    const event = { systemPrompt: "Pi Main", systemPromptOptions: { selectedTools: ["subagent"], sections: {} as Record<string, string> } };
+    h.handlers.get("before_agent_start")!(event, h.ctx);
+    assert.match(event.systemPromptOptions.sections.hyagents, /hyagents.worker/);
     assert.equal(h.notifications.length, 0);
-  } finally { h.handlers.get("session_shutdown")!(); }
+  } finally { owner.dispose(); }
 });
 
 test("background children do not register Main hooks or commands", () => {
@@ -99,5 +106,5 @@ test("missing runtime and authentication produce actionable diagnostics without 
     assert.match(h.notifications.join("\n"), /authenticate anthropic/);
     await h.commands.get("hyagents").handler("", h.ctx);
     assert.match(h.notifications.at(-1)!, /hyagents.worker: openai-codex\/gpt-6-luna:max/);
-  } finally { h.handlers.get("session_shutdown")!(); }
+  } finally { h.handlers.get("session_shutdown")?.(); }
 });
