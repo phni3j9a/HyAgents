@@ -8,7 +8,7 @@ import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { getModels } from "@earendil-works/pi-ai/compat";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { modelCommand, modelCompletions } from "../src/model-command.ts";
-import { configuredSelection, saveSelection } from "../src/native-settings.ts";
+import { configuredFast, configuredSelection, saveSelection } from "../src/native-settings.ts";
 import { modelSpec, ROLES } from "../src/models.ts";
 
 const fixture = mkdtempSync(path.join(tmpdir(), "hyagents-picker-"));
@@ -18,12 +18,17 @@ mkdirSync(agentDir); mkdirSync(cwd);
 process.env.PI_CODING_AGENT_DIR = agentDir;
 const root = fileURLToPath(new URL("../", import.meta.url));
 const settingsPath = path.join(agentDir, "settings.json");
+const fastPath = path.join(agentDir, "hyagents.json");
 const base = { packages: [root], theme: "dark", subagents: { agentOverrides: { "hyagents.worker": { tools: ["read", "edit"], fast: false }, unrelated: { model: "keep/me" } } } };
 beforeEach(() => {
   writeFileSync(settingsPath, JSON.stringify(base));
   rmSync(path.join(cwd, ".pi"), { recursive: true, force: true });
+  rmSync(fastPath, { force: true });
 });
 after(() => rmSync(fixture, { recursive: true, force: true }));
+
+const OFF = "Off — standard service tier";
+const ON = "On — priority service tier (faster, higher usage/cost)";
 
 const models = [
   ...Object.values(ROLES).map(({ provider, id }) => getModels(provider).find((model) => model.id === id)!),
@@ -51,12 +56,13 @@ function ui(answers: (string | undefined)[], confirm = true) {
 }
 
 test("role picker saves a different model and lower thinking to native settings, preserving unrelated fields", async () => {
-  const h = ui(["openai-codex", "gpt-6.1-sol", "low", "User — all projects"]);
+  const h = ui(["openai-codex", "gpt-6.1-sol", "low", OFF, "User — all projects"]);
   await modelCommand("worker", h.ctx);
   const saved = JSON.parse(readFileSync(settingsPath, "utf8"));
   assert.equal(saved.theme, "dark");
   assert.deepEqual(saved.subagents.agentOverrides.unrelated, base.subagents.agentOverrides.unrelated);
   assert.deepEqual(saved.subagents.agentOverrides["hyagents.worker"], { tools: ["read", "edit"], fast: false, model: "openai-codex/gpt-6.1-sol:low", thinking: "low" });
+  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.worker": false } });
   assert.equal(modelSpec(await configuredSelection("hyagents.worker", h.ctx)), "openai-codex/gpt-6.1-sol:low");
   assert.match(h.notifications.at(-1)!.text, /Applies to new children/);
   assert.equal(h.notifications.at(-1)!.type, "info");
@@ -71,14 +77,14 @@ test("top-level menu shows effective choices and edits the selected role", async
 
 test("non-reasoning models offer only off, and off is saved explicitly", async () => {
   const model = models.find((item) => !item.reasoning)!;
-  const h = ui([model.provider, model.id, "off", "User — all projects"]);
+  const h = ui([model.provider, model.id, "off", OFF, "User — all projects"]);
   await modelCommand("hyagents.worker", h.ctx);
   assert.deepEqual(h.dialogs[2].options, getSupportedThinkingLevels(model));
   assert.equal((await configuredSelection("hyagents.worker", h.ctx)).thinking, "off");
 });
 
 test("cancelling any selection dialog writes nothing", async () => {
-  const steps = ["openai-codex", "gpt-6.1-sol", "low", "User — all projects"];
+  const steps = ["openai-codex", "gpt-6.1-sol", "low", OFF, "User — all projects"];
   const original = readFileSync(settingsPath, "utf8");
   for (let index = 0; index < steps.length; index++) {
     await modelCommand("worker", ui([...steps.slice(0, index), undefined]).ctx);
@@ -89,11 +95,11 @@ test("cancelling any selection dialog writes nothing", async () => {
 });
 
 test("project setting wins, persists independently, and shadowed user saves are reported", async () => {
-  const h = ui(["openai-codex", "gpt-6.1-sol", "high", "Project — this project only"]);
+  const h = ui(["openai-codex", "gpt-6.1-sol", "high", OFF, "Project — this project only"]);
   await modelCommand("worker", h.ctx);
   assert.equal(modelSpec(await configuredSelection("hyagents.worker", h.ctx)), "openai-codex/gpt-6.1-sol:high");
   assert.equal(readFileSync(settingsPath, "utf8"), JSON.stringify(base));
-  const another = ui(["openai-codex", "gpt-6-luna", "low", "User — all projects"]);
+  const another = ui(["openai-codex", "gpt-6-luna", "low", OFF, "User — all projects"]);
   await modelCommand("worker", another.ctx);
   assert.equal(modelSpec(await configuredSelection("hyagents.worker", another.ctx)), "openai-codex/gpt-6.1-sol:high");
   assert.match(another.notifications.at(-1)!.text, /Current project uses/);
@@ -126,7 +132,7 @@ test("cancelled reset, headless invocation, unknown roles and unavailable authen
 });
 
 test("untrusted projects cannot be chosen as the save scope", async () => {
-  const h = ui(["openai-codex", "gpt-6-luna", "low", undefined]);
+  const h = ui(["openai-codex", "gpt-6-luna", "low", OFF, undefined]);
   h.ctx.isProjectTrusted = () => false;
   await modelCommand("worker", h.ctx);
   assert.deepEqual(h.dialogs.at(-1)!.options, ["User — all projects"]);
@@ -134,9 +140,62 @@ test("untrusted projects cannot be chosen as the save scope", async () => {
 
 test("malformed settings are not overwritten", async () => {
   writeFileSync(settingsPath, "{broken json");
-  const h = ui(["openai-codex", "gpt-6.1-sol", "low", "User — all projects"]);
+  const h = ui(["openai-codex", "gpt-6.1-sol", "low", OFF, "User — all projects"]);
   await assert.rejects(modelCommand("worker", h.ctx), /parse settings/);
   assert.equal(readFileSync(settingsPath, "utf8"), "{broken json");
+  assert.equal(existsSync(fastPath), false, "Fast file rolled back when the native write fails");
+  writeFileSync(fastPath, JSON.stringify({ fast: { "hyagents.scout": true } }));
+  await assert.rejects(modelCommand("worker", ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]).ctx), /parse settings/);
+  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.scout": true } }, "previous Fast file restored");
+});
+
+test("malformed Fast settings stop the save before the model selection changes", async () => {
+  writeFileSync(fastPath, "{broken json");
+  const original = readFileSync(settingsPath, "utf8");
+  await assert.rejects(modelCommand("worker", ui(["openai-codex", "gpt-6.1-sol", "low", ON, "User — all projects"]).ctx), /failed to parse/);
+  assert.equal(readFileSync(settingsPath, "utf8"), original);
+  assert.equal(readFileSync(fastPath, "utf8"), "{broken json");
+});
+
+test("Fast saves for different roles are merged, not replaced", async () => {
+  const selection = { provider: "openai-codex", id: "gpt-6-luna", thinking: "high" as const };
+  await saveSelection(cwd, "hyagents.worker", selection, "user", true);
+  await saveSelection(cwd, "hyagents.scout", selection, "user", false);
+  assert.deepEqual(JSON.parse(readFileSync(fastPath, "utf8")), { fast: { "hyagents.worker": true, "hyagents.scout": false } });
+});
+
+test("Fast mode is offered only for OpenAI providers, saved explicitly and shown in the role menu", async () => {
+  const h = ui(["openai-codex", "gpt-6-luna", "high", ON, "User — all projects"]);
+  await modelCommand("worker", h.ctx);
+  assert.deepEqual(h.dialogs[3], { title: "hyagents.worker — fast mode", options: [OFF, ON] });
+  assert.equal(JSON.parse(readFileSync(fastPath, "utf8")).fast["hyagents.worker"], true);
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), true);
+  assert.match(h.notifications.at(-1)!.text, /saved openai-codex\/gpt-6-luna:high fast/);
+  const menu = ui([undefined]);
+  await modelCommand("", menu.ctx);
+  assert.ok(menu.dialogs[0].options.includes("worker — openai-codex/gpt-6-luna:high fast"));
+  const anthropic = ui(["anthropic", "claude-opus-5-5", "high", "User — all projects"]);
+  await modelCommand("worker", anthropic.ctx);
+  assert.ok(!anthropic.dialogs.some((dialog) => dialog.title.endsWith("fast mode")));
+  assert.equal(await configuredFast("hyagents.worker", anthropic.ctx), false);
+  assert.equal(JSON.parse(readFileSync(fastPath, "utf8")).fast["hyagents.worker"], false);
+});
+
+test("project Fast choice overrides the user choice; reset turns Fast off", async () => {
+  const selection = { provider: "openai-codex", id: "gpt-6-luna", thinking: "high" as const };
+  await saveSelection(cwd, "hyagents.worker", selection, "user", true);
+  const h = ui([]);
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), true);
+  await saveSelection(cwd, "hyagents.worker", selection, "project", false);
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), false);
+  h.ctx.isProjectTrusted = () => false;
+  assert.equal(await configuredFast("hyagents.worker", h.ctx), true, "untrusted project settings are ignored");
+  await saveSelection(cwd, "hyagents.worker", { provider: "anthropic", id: "claude-opus-5-5", thinking: "high" }, "user", true);
+  assert.equal(JSON.parse(readFileSync(fastPath, "utf8")).fast["hyagents.worker"], false, "unsupported providers never save Fast");
+  rmSync(path.join(cwd, ".pi"), { recursive: true, force: true });
+  await saveSelection(cwd, "hyagents.scout", selection, "user", true);
+  await modelCommand("reset", ui(["User — all projects"]).ctx);
+  assert.equal(await configuredFast("hyagents.scout", ui([]).ctx), false);
 });
 
 test("slash completions expose model selection, roles and reset", () => {

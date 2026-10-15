@@ -1,7 +1,9 @@
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { assertSelection, isRole, modelSpec, ROLES, ROLE_NAMES, type ModelSelection, type RoleName } from "./models.ts";
-import { checkProviderSelection, configuredSelection, saveSelection, type SettingsScope } from "./native-settings.ts";
+import { assertSelection, describeSelection, isRole, modelSpec, ROLES, ROLE_NAMES, supportsFast, type ModelSelection, type RoleName } from "./models.ts";
+import { checkProviderSelection, configuredFast, configuredSelection, saveSelection, type SettingsScope } from "./native-settings.ts";
+
+const FAST_CHOICES = ["Off — standard service tier", "On — priority service tier (faster, higher usage/cost)"];
 
 const USAGE = "/hyagents models [worker|scout|reviewer|designer|reset]";
 
@@ -11,18 +13,20 @@ async function chooseScope(ctx: ExtensionCommandContext): Promise<SettingsScope 
   return choice === choices[0] ? "user" : choice === choices[1] && choices.length > 1 ? "project" : undefined;
 }
 
-async function reportSaved(name: RoleName, wanted: ModelSelection, file: string, ctx: ExtensionCommandContext): Promise<void> {
+async function reportSaved(name: RoleName, wanted: ModelSelection, fast: boolean, file: string, ctx: ExtensionCommandContext): Promise<void> {
   // Display the effective selection as well as the saved one. A project override
   // can legitimately shadow a user setting; never claim that it took effect.
+  const saved = describeSelection(wanted, fast);
   try {
     const actual = await configuredSelection(name, ctx);
     await checkProviderSelection(name, ctx, actual);
-    const shadowed = modelSpec(actual) !== modelSpec(wanted);
-    ctx.ui.notify(`${name}: saved ${modelSpec(wanted)}\n${file}\n${shadowed
-      ? `Current project uses ${modelSpec(actual)}. Change the project setting to override it.`
+    const effective = describeSelection(actual, await configuredFast(name, ctx));
+    const shadowed = effective !== saved;
+    ctx.ui.notify(`${name}: saved ${saved}\n${file}\n${shadowed
+      ? `Current project uses ${effective}. Change the project setting to override it.`
       : "Applies to new children. Existing and retained children keep their original selection."}`, shadowed ? "warning" : "info");
   } catch (error) {
-    ctx.ui.notify(`${name}: saved ${modelSpec(wanted)}\n${file}\nNot ready: ${error instanceof Error ? error.message : String(error)}`, "warning");
+    ctx.ui.notify(`${name}: saved ${saved}\n${file}\nNot ready: ${error instanceof Error ? error.message : String(error)}`, "warning");
   }
 }
 
@@ -37,10 +41,10 @@ export async function modelCommand(args: string, ctx: ExtensionCommandContext): 
   if (target === "reset") {
     const scope = await chooseScope(ctx);
     if (!scope) return;
-    if (!await ctx.ui.confirm("Restore HyAgents defaults?", `${ROLE_NAMES.map((name) => `${name}: ${modelSpec(name)}`).join("\n")}\n\nSave to ${scope} settings. Other agent settings are preserved.`)) return;
+    if (!await ctx.ui.confirm("Restore HyAgents defaults?", `${ROLE_NAMES.map((name) => `${name}: ${modelSpec(name)}`).join("\n")}\nFast mode: off for all roles.\n\nSave to ${scope} settings. Other agent settings are preserved.`)) return;
     for (const name of ROLE_NAMES) {
-      const file = await saveSelection(ctx.cwd, name, ROLES[name], scope);
-      await reportSaved(name, ROLES[name], file, ctx);
+      const file = await saveSelection(ctx.cwd, name, ROLES[name], scope, false);
+      await reportSaved(name, ROLES[name], false, file, ctx);
     }
     return;
   }
@@ -48,7 +52,7 @@ export async function modelCommand(args: string, ctx: ExtensionCommandContext): 
   if (name && !isRole(name)) { ctx.ui.notify(`Unknown role. Usage: ${USAGE}`, "error"); return; }
   if (!name) {
     const labels = await Promise.all(ROLE_NAMES.map(async (role) => {
-      try { return `${role.slice(9)} — ${modelSpec(await configuredSelection(role, ctx))}`; }
+      try { return `${role.slice(9)} — ${describeSelection(await configuredSelection(role, ctx), await configuredFast(role, ctx))}`; }
       catch { return `${role.slice(9)} — configuration needs attention`; }
     }));
     const chosen = await ctx.ui.select("HyAgents models", labels);
@@ -69,10 +73,16 @@ export async function modelCommand(args: string, ctx: ExtensionCommandContext): 
   if (!thinking || !levels.includes(thinking as typeof levels[number])) return;
   const selection: ModelSelection = { provider: model.provider, id: model.id, thinking: thinking as typeof levels[number] };
   assertSelection(name, model, thinking, selection);
+  let fast = false;
+  if (supportsFast(selection.provider)) {
+    const choice = await ctx.ui.select(`${name} — fast mode`, FAST_CHOICES);
+    if (!choice || !FAST_CHOICES.includes(choice)) return;
+    fast = choice === FAST_CHOICES[1];
+  }
   const scope = await chooseScope(ctx);
   if (!scope) return;
-  const file = await saveSelection(ctx.cwd, name, selection, scope);
-  await reportSaved(name, selection, file, ctx);
+  const file = await saveSelection(ctx.cwd, name, selection, scope, fast);
+  await reportSaved(name, selection, fast, file, ctx);
 }
 
 export function modelCompletions(prefix: string): { value: string; label: string }[] | null {
