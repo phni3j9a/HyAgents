@@ -12,6 +12,24 @@ export type Thinking = ReturnType<typeof getSupportedThinkingLevels>[number];
 export interface ModelSelection { provider: string; id: string; thinking: Thinking }
 export const ROLE_NAMES = Object.keys(ROLES) as RoleName[];
 
+/** Providers whose Responses requests accept OpenAI's priority service tier (Fast mode). */
+const FAST_PROVIDERS = new Set(["openai", "openai-codex"]);
+export const FAST_SERVICE_TIER = "priority";
+
+export function supportsFast(provider: string): boolean {
+  return FAST_PROVIDERS.has(provider);
+}
+
+export function describeSelection(selection: ModelSelection, fast: boolean): string {
+  return `${modelSpec(selection)}${fast ? " fast" : ""}`;
+}
+
+export function assertFast(name: RoleName, selection: ModelSelection, fast: boolean): void {
+  if (fast && !supportsFast(selection.provider)) {
+    throw new Error(`HyAgents: ${name} enables Fast mode, which supports only OpenAI providers (openai, openai-codex); selected ${modelSpec(selection)}. Use /hyagents models to change the selection.`);
+  }
+}
+
 export function isRole(name: string): name is RoleName {
   return Object.hasOwn(ROLES, name);
 }

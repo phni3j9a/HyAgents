@@ -54,7 +54,7 @@ test("real Pi loads both packages, enforces selection, and saves models through 
     const command = session.extensionRunner.getCommand("hyagents");
     assert.ok(command);
     const commandCtx = { ...session.extensionRunner.createCommandContext(), hasUI: true };
-    const answers = ["openai-codex", "gpt-6-luna", "high", "User — all projects"];
+    const answers = ["openai-codex", "gpt-6-luna", "high", "On — priority service tier (faster, higher usage/cost)", "User — all projects"];
     const notices: { text: string; type?: string }[] = [];
     commandCtx.modelRegistry.getAvailable = () => commandCtx.modelRegistry.getAll();
     commandCtx.ui = { ...commandCtx.ui,
@@ -70,10 +70,11 @@ test("real Pi loads both packages, enforces selection, and saves models through 
     assert.equal(notices.at(-1)?.type, "info", JSON.stringify(notices));
     const saved = JSON.parse(readFileSync(path.join(agentDir, "settings.json"), "utf8"));
     assert.equal(saved.subagents.agentOverrides["hyagents.worker"].model, "openai-codex/gpt-6-luna:high");
+    assert.deepEqual(JSON.parse(readFileSync(path.join(agentDir, "hyagents.json"), "utf8")), { fast: { "hyagents.worker": true } });
     assert.equal(session.model?.id, "gpt-6.1-sol");
     assert.equal(session.thinkingLevel, "low");
     await command.handler("", commandCtx);
-    assert.match(notices.at(-1)!.text, /hyagents.worker: openai-codex\/gpt-6-luna:high/);
+    assert.match(notices.at(-1)!.text, /hyagents.worker: openai-codex\/gpt-6-luna:high fast/);
   } finally {
     if (session) {
       await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" });

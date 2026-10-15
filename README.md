@@ -4,7 +4,7 @@
 
 ## Agent構成
 
-以下は**初期値**です。4役割のモデルとThinkingは `/hyagents models` で変更できます。Workerの `max` も変更可能です。
+以下は**初期値**です。4役割のモデル・Thinking・Fastモードは `/hyagents models` で変更できます。Workerの `max` も変更可能です。Fastモードの初期値は全役割でoffです。
 
 | Agent | PiのモデルID | Thinking | 担当 |
 | --- | --- | --- | --- |
@@ -81,7 +81,7 @@ Scout／Reviewerの非編集方針はプロンプトによる役割定義です�
 /hyagents models reset
 ```
 
-引数なしの `models` は4役割の現在の設定を表示します。役割を選んだ後、**プロバイダー → モデル → Thinking → 保存先**の順に選択します。`models worker` などではその役割の設定を直接開きます。途中でEscなどでキャンセルすると保存しません。
+引数なしの `models` は4役割の現在の設定を表示します（Fast有効時は末尾に `fast`）。役割を選んだ後、**プロバイダー → モデル → Thinking → Fast（OpenAI系のみ） → 保存先**の順に選択します。`models worker` などではその役割の設定を直接開きます。途中でEscなどでキャンセルすると保存しません。
 
 - モデル候補はPiで認証設定済みのプロバイダーの登録モデルです。実際の利用権限・利用枠は起動時に確認されます。
 - Thinkingには、そのモデルが対応する値だけを表示します。推論非対応モデルは `off` です。
@@ -89,9 +89,17 @@ Scout／Reviewerの非編集方針はプロンプトによる役割定義です�
 - プロジェクト設定が優先されます。ユーザー共通設定を変更してもプロジェクト設定が優先される場合は、その旨と実効値を表示します。
 - 保存後、**新しく起動する子Agentから反映**されます。設定変更のたびに `/reload` を実行する必要はありません。ほかのPiプロセスの表示は再読込まで古い場合があります。
 - 実行中の子Agentは変更しません。v0.2以降に起動して会話が保存された保持セッションは、再開時も起動時の設定を使います。新設定を使うには新しい子Agentを開始してください。
-- `reset` は保存先を選んで確認した後、4役割のモデル・Thinkingを上表の初期値に戻します。他の設定は維持します。
+- `reset` は保存先を選んで確認した後、4役割のモデル・Thinkingを上表の初期値に戻し、Fastをoffにします。他の設定は維持します。
 
-保存先はpi-subagents標準の `subagents.agentOverrides` です。ユーザー設定は通常 `~/.pi/agent/settings.json`、プロジェクト設定はpi-subagentsが解決するプロジェクトの `.pi/settings.json` です。設定ルートがない場合、プロジェクト保存時に現在のディレクトリへ `.pi` を作成します。パッケージ内のAgent定義を直接編集する必要はありません。
+### Fastモード
+
+OpenAI系プロバイダー（`openai`、`openai-codex`）のモデルを選ぶと、Fastモードのon/offを選べます。onの子Agentは、プロバイダーへのリクエストに `service_tier: "priority"` を付けます。処理は速くなる一方、利用枠・費用の消費が増えます（Piの料金計算では通常の約2倍、gpt-5.5は2.5倍）。Sign in with ChatGPT利用時に優先処理がどの程度効くかはOpenAI側の扱いに依存します。
+
+- Anthropicなど他のプロバイダーでは選択肢を表示せず、offとして保存します。手動設定で非対応プロバイダーにFastを有効にした場合、子Agentは起動時に停止します。
+- pi-subagentsネイティブの `fast: true` は `openai-codex/*` 専用で、Pi 1.2以降のSign in with ChatGPT（`openai` プロバイダー）では使えないため、HyAgentsは独自に適用します。ネイティブの `fast` は変更しません。
+- 保持セッションは、モデルと同様に起動時のFast選択を維持します。Fast対応前に作成した保持セッションはoffとして扱います。
+
+モデル・Thinkingの保存先はpi-subagents標準の `subagents.agentOverrides` です。Fastは同じディレクトリの `hyagents.json`（ユーザー: `~/.pi/agent/hyagents.json`、プロジェクト: `.pi/hyagents.json`）に `{ "fast": { "hyagents.worker": true } }` の形で保存し、プロジェクト設定が優先されます（未信頼プロジェクトでは無視）。pi-subagentsの設定エディターは未知のoverride項目を書き込まないため、別ファイルにしています。ユーザー設定は通常 `~/.pi/agent/settings.json`、プロジェクト設定はpi-subagentsが解決するプロジェクトの `.pi/settings.json` です。設定ルートがない場合、プロジェクト保存時に現在のディレクトリへ `.pi` を作成します。パッケージ内のAgent定義を直接編集する必要はありません。
 
 例（Workerだけを変更）:
 
@@ -112,7 +120,7 @@ Scout／Reviewerの非編集方針はプロンプトによる役割定義です�
 
 ### 選択の検証
 
-MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検証Extensionを登録します。新しい子の設定は公開preflight APIで取得し、**実際のモデル・Thinkingを最初のモデルリクエスト前に照合**します。per-run overrideやPiによる未対応Thinkingの丸めで設定から外れた場合は停止します。Mainのモデル／Thinkingは変更しません。
+MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検証Extensionを登録します。新しい子の設定は公開preflight APIで取得し、**実際のモデル・Thinkingを最初のモデルリクエスト前に照合**します。Fastモードの適用も同じ検証Extensionが行います。per-run overrideやPiによる未対応Thinkingの丸めで設定から外れた場合は停止します。Mainのモデル／Thinkingは変更しません。
 
 通常の `subagent`、ネイティブworkflow、`/run` が対象です。保持セッション用の選択はPi標準のcustom entryに記録し、独自のセッションファイルやCheckpointは作りません。v0.1で作成した保持セッションには記録がないため、初回再開時に現在の設定と照合します。不一致なら新しい子Agentを開始してください。
 
@@ -140,10 +148,11 @@ MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検�
 | `agents/` | 名前空間付きの4つのネイティブAgent定義 |
 | `skills/hyagents/SKILL.md` | 短い委任方針。Extensionもこの本文を読み、重複した方針を持たない |
 | `extensions/hyagents.ts` | Mainへの自動適用、コマンド登録、検証Extensionの登録 |
-| `extensions/verify-child.ts` | ネイティブ子セッション起動時のモデル検証 |
+| `extensions/verify-child.ts` | ネイティブ子セッション起動時のモデル検証とFastモードの適用 |
 | `src/models.ts` | 推奨初期値、モデル表現と照合 |
 | `src/model-command.ts` | 役割別のモデル・Thinking選択メニュー |
 | `src/native-settings.ts` | ネイティブ設定の読み取りと保存 |
+| `src/fast-settings.ts` | Fastモード設定（`hyagents.json`）の読み取りと保存 |
 
 Mainへの適用にはPiの構造化prompt sectionを使い、他のExtensionの指示やprompt cacheを維持します。子AgentへMain用ポリシーを再注入しません。組み込みの `worker`、`scout`、`reviewer` は上書きしません。
 

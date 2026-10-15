@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { registerRequiredChildExtensions, type RequiredChildExtensionRegistration } from "pi-subagents/required-child-extensions";
-import { activeAgent, modelSpec, ROLE_NAMES, ROLES } from "../src/models.ts";
-import { checkProviderSelection, configuredSelection } from "../src/native-settings.ts";
+import { activeAgent, assertFast, describeSelection, ROLE_NAMES, ROLES } from "../src/models.ts";
+import { checkProviderSelection, configuredFast, configuredSelection } from "../src/native-settings.ts";
 import { modelCommand, modelCompletions } from "../src/model-command.ts";
 
 const policy = readFileSync(new URL("../skills/hyagents/SKILL.md", import.meta.url), "utf8")
@@ -33,8 +33,10 @@ export default function hyagents(pi: ExtensionAPI): void {
     for (const name of ROLE_NAMES) {
       try {
         const role = await configuredSelection(name, ctx);
-        mapping.push(`${name}: ${modelSpec(role)}`);
+        const fast = await configuredFast(name, ctx);
+        mapping.push(`${name}: ${describeSelection(role, fast)}`);
         await checkProviderSelection(name, ctx, role);
+        assertFast(name, role, fast);
         const model = ctx.modelRegistry.find(role.provider, role.id);
         if (!model) lines.push(`${name}: missing ${role.provider}/${role.id}; update Pi/provider model configuration.`);
         else if (!getSupportedThinkingLevels(model).includes(role.thinking)) lines.push(`${name}: ${role.thinking} is unsupported; choose a supported value with /hyagents models.`);

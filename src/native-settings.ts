@@ -2,7 +2,8 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resolveSubagentLaunchContract } from "pi-subagents/preflight";
-import { modelSpec, parseSelection, type ModelSelection, type RoleName } from "./models.ts";
+import { configuredFastFrom, saveFast, type FastContext } from "./fast-settings.ts";
+import { modelSpec, parseSelection, supportsFast, type ModelSelection, type RoleName } from "./models.ts";
 
 export type SettingsScope = "user" | "project";
 
@@ -16,12 +17,25 @@ function native(): Promise<NativeSettings> {
   return nativeSettings ??= import(new URL(`../agents/agents.${entry.endsWith(".ts") ? "ts" : "js"}`, entry).href);
 }
 
-export async function saveSelection(cwd: string, name: RoleName, selection: ModelSelection, scope: SettingsScope): Promise<string> {
+/** Native project-root resolution, shared with the HyAgents Fast settings file. */
+export async function configuredProjectRoot(cwd: string): Promise<string | undefined> {
+  return (await native()).findConfiguredProjectRoot(cwd) ?? undefined;
+}
+
+export async function saveSelection(cwd: string, name: RoleName, selection: ModelSelection, scope: SettingsScope, fast = false): Promise<string> {
   const api = await native();
   if (scope === "project" && !api.findConfiguredProjectRoot(cwd)) {
     mkdirSync(path.join(cwd, CONFIG_DIR_NAME), { recursive: true });
   }
-  return api.mergeBuiltinAgentOverride(cwd, name, scope, { model: modelSpec(selection), thinking: selection.thinking });
+  const file = api.mergeBuiltinAgentOverride(cwd, name, scope, { model: modelSpec(selection), thinking: selection.thinking });
+  // Save Fast after the native write succeeds, next to the same settings file.
+  saveFast(path.dirname(file), name, fast && supportsFast(selection.provider));
+  return file;
+}
+
+/** Effective Fast choice for a role (project file wins when the project is trusted). */
+export async function configuredFast(name: RoleName, ctx: FastContext): Promise<boolean> {
+  return configuredFastFrom(ctx.isProjectTrusted() ? await configuredProjectRoot(ctx.cwd) : undefined, name);
 }
 
 type SelectionContext = Pick<ExtensionContext, "cwd" | "modelRegistry" | "isProjectTrusted">;
