@@ -1,6 +1,6 @@
 # Third-party notices
 
-HyAgents' delegation policy and reviewer instructions adapt the ideas and review criteria in Oh My Pi's `packages/coding-agent/src/prompts/tools/task.md` and `packages/coding-agent/src/prompts/agents/reviewer.md`, inspected on 2026-10-09. OMP-specific tools, schemas and execution protocols are not copied into HyAgents.
+Hybrid Subagents' delegation policy and reviewer instructions adapt the ideas and review criteria in Oh My Pi's `packages/coding-agent/src/prompts/tools/task.md` and `packages/coding-agent/src/prompts/agents/reviewer.md`, inspected on 2026-10-09. OMP-specific tools, schemas and execution protocols are not copied into Hybrid Subagents.
 
 Source: https://github.com/can1357/oh-my-pi
 
@@ -30,7 +30,7 @@ SOFTWARE.
 
 ## Runtime dependencies
 
-Pi and pi-subagents are MIT-licensed upstream dependencies, not HyAgents forks.
+Pi and pi-subagents are MIT-licensed upstream dependencies, not Hybrid Subagents forks.
 Their licenses and those of transitive dependencies ship with the installed packages.
 
 - Pi 1.1.0: https://github.com/earendil-works/pi (inspected source f1b2e77f5b13b2a199b1052cb79c235451afe7d7)

@@ -106,14 +106,14 @@ function launch(name: string, model: string) {
 }
 
 test("wrong native model fails startup instead of silently using a fallback", async () => {
-  await assert.rejects(factory.create(launch("hyagents.worker", "openai-codex/gpt-6.1-sol:max")), /Required child extension failed during startup:.*HyAgents:.*requires/s);
+  await assert.rejects(factory.create(launch("hyagents.worker", "openai-codex/gpt-6.1-sol:max")), /Required child extension failed during startup:.*Hybrid Subagents:.*requires/s);
 });
 
 test("lower thinking from a per-run override fails before a child can prompt", async () => {
   await assert.rejects(factory.create(launch("hyagents.worker", "openai-codex/gpt-6-luna:high")), /requires.*:max; resolved.*:high/s);
 });
 
-test("unrelated native agents are unaffected by HyAgents model checks", async () => {
+test("unrelated native agents are unaffected by Hybrid Subagents model checks", async () => {
   const child = await factory.create(launch("worker", "openai-codex/gpt-6.1-sol:low"));
   await child.dispose();
 });
@@ -147,7 +147,7 @@ test("opening a retained native session still verifies model/effort before promp
   const retained = { ...launch("hyagents.worker", modelSpec("hyagents.worker")), storage: { kind: "file" as const, sessionFile } };
   const resumed = await factory.create(retained);
   await resumed.dispose();
-  await assert.rejects(factory.create({ ...retained, model: "openai-codex/gpt-6-luna:low" }), /HyAgents:.*requires/s);
+  await assert.rejects(factory.create({ ...retained, model: "openai-codex/gpt-6-luna:low" }), /Hybrid Subagents:.*requires/s);
 });
 
 test("saved choices apply to new real children while retained children keep their initial selection", async () => {
@@ -187,7 +187,7 @@ test("Fast mode adds the priority service tier to new children and retained chil
     const sessionFile = first.sessionFile!;
     await first.dispose();
     const unrelated = await factory.create(launch("worker", "openai-codex/gpt-6.1-sol:low"));
-    assert.equal((await providerPayload(unrelated.sessionId)).service_tier, undefined, "non-HyAgents agents are untouched");
+    assert.equal((await providerPayload(unrelated.sessionId)).service_tier, undefined, "non-Hybrid Subagents agents are untouched");
     await unrelated.dispose();
 
     await saveSelection(fixture, "hyagents.worker", ROLES["hyagents.worker"], "user", false);
@@ -207,6 +207,6 @@ test("Fast mode on a non-OpenAI provider fails startup instead of being ignored"
   const fastFile = path.join(agentDir, "hyagents.json");
   writeFileSync(fastFile, JSON.stringify({ fast: { "hyagents.designer": true } }));
   try {
-    await assert.rejects(factory.create(launch("hyagents.designer", modelSpec("hyagents.designer"))), /HyAgents:.*Fast mode.*supports only OpenAI/s);
+    await assert.rejects(factory.create(launch("hyagents.designer", modelSpec("hyagents.designer"))), /Hybrid Subagents:.*Fast mode.*supports only OpenAI/s);
   } finally { rmSync(fastFile, { force: true }); }
 });

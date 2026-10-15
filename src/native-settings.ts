@@ -27,7 +27,7 @@ function native(): Promise<NativeSettings> {
   }));
 }
 
-/** Native project-root resolution, shared with the HyAgents Fast settings file. */
+/** Native project-root resolution, shared with the Hybrid Subagents Fast settings file. */
 export async function configuredProjectRoot(cwd: string): Promise<string | undefined> {
   return (await native()).findConfiguredProjectRoot(cwd) ?? undefined;
 }
@@ -38,7 +38,7 @@ export async function saveSelection(cwd: string, name: RoleName, selection: Mode
     mkdirSync(path.join(cwd, CONFIG_DIR_NAME), { recursive: true });
   }
   const root = scope === "project" ? api.findConfiguredProjectRoot(cwd) : undefined;
-  if (scope === "project" && !root) throw new Error("HyAgents: project settings are not available here. No project config root was found.");
+  if (scope === "project" && !root) throw new Error("Hybrid Subagents: project settings are not available here. No project config root was found.");
   const fastFile = path.join(root ? path.join(root, CONFIG_DIR_NAME) : getAgentDir(), FAST_FILE);
   // Lock order: Fast file, then the native settings file (inside mergeBuiltinAgentOverride).
   // The Fast file is validated before anything is written and restored if the native
@@ -68,8 +68,8 @@ export async function configuredSelection(name: RoleName, ctx: SelectionContext)
     agent: name, cwd: ctx.cwd, agentScope: ctx.isProjectTrusted() ? "both" : "user",
     availableModels: ctx.modelRegistry.getAll(),
   });
-  if (!result.ok) throw new Error(`HyAgents: ${name}: ${result.message}`);
-  if (!result.contract.model) throw new Error(`HyAgents: ${name} requires a local native Pi model.`);
+  if (!result.ok) throw new Error(`Hybrid Subagents: ${name}: ${result.message}`);
+  if (!result.contract.model) throw new Error(`Hybrid Subagents: ${name} requires a local native Pi model.`);
   return parseSelection(result.contract.model, result.contract.thinking);
 }
 
@@ -80,8 +80,8 @@ export async function checkProviderSelection(name: RoleName, ctx: ExtensionConte
     agent: name, cwd: ctx.cwd, agentScope: ctx.isProjectTrusted() ? "both" : "user",
     availableModels: ctx.modelRegistry.getAll(), preferredProvider: ctx.model.provider,
   });
-  if (!result.ok) throw new Error(`HyAgents: ${name}: ${result.message}`);
+  if (!result.ok) throw new Error(`Hybrid Subagents: ${name}: ${result.message}`);
   if (result.contract.model && modelSpec(parseSelection(result.contract.model, result.contract.thinking)) !== modelSpec(selected)) {
-    throw new Error(`HyAgents: ${name} has a conflicting agentOverridesByProvider selection. Use an ordinary agentOverrides selection for HyAgents.`);
+    throw new Error(`Hybrid Subagents: ${name} has a conflicting agentOverridesByProvider selection. Use an ordinary agentOverrides selection for Hybrid Subagents.`);
   }
 }

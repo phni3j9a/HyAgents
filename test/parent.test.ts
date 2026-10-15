@@ -15,7 +15,7 @@ test("real Pi loads both packages, enforces selection, and saves models through 
   writeFileSync(path.join(agentDir, "settings.json"), JSON.stringify({ packages: [path.join(root, "node_modules/pi-subagents"), root], compaction: { enabled: false } }));
   // Fail closed if a regression ever reaches network transport during this offline smoke.
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw new Error("HyAgents offline test forbids network requests"); };
+  globalThis.fetch = async () => { throw new Error("Hybrid Subagents offline test forbids network requests"); };
   const { createAgentSession, DefaultResourceLoader, ModelRuntime, SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
   const runtime = await ModelRuntime.create({ authPath: path.join(agentDir, "auth.json"), modelsPath: null, allowModelNetwork: false });
   const settings = SettingsManager.create(fixture, agentDir);
@@ -37,7 +37,7 @@ test("real Pi loads both packages, enforces selection, and saves models through 
     const tool = session.getToolDefinition("subagent");
     assert.ok(tool);
     const toolContext = { ...ctx, tools: [], executeTool: async () => { throw new Error("No nested tool execution expected"); } };
-    await assert.rejects(tool.execute("hyagents-wrong-thinking", { agent: "hyagents.worker", task: "Reply with a short result.", model: "openai-codex/gpt-6-luna:low", async: false }, undefined, undefined, toolContext), /HyAgents:.*requires/);
+    await assert.rejects(tool.execute("hyagents-wrong-thinking", { agent: "hyagents.worker", task: "Reply with a short result.", model: "openai-codex/gpt-6-luna:low", async: false }, undefined, undefined, toolContext), /Hybrid Subagents:.*requires/);
     const workflowPath = path.join(fixture, "parallel.js");
     writeFileSync(workflowPath, `return await runs.all([
       { key: "writer", agent: "hyagents.worker", task: "Inspect assigned code.", model: "openai-codex/gpt-6-luna:low", async: false },

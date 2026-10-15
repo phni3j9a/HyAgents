@@ -26,7 +26,7 @@ export function describeSelection(selection: ModelSelection, fast: boolean): str
 
 export function assertFast(name: RoleName, selection: ModelSelection, fast: boolean): void {
   if (fast && !supportsFast(selection.provider)) {
-    throw new Error(`HyAgents: ${name} enables Fast mode, which supports only OpenAI providers (openai, openai-codex); selected ${modelSpec(selection)}. Use /hyagents models to change the selection.`);
+    throw new Error(`Hybrid Subagents: ${name} enables Fast mode, which supports only OpenAI providers (openai, openai-codex); selected ${modelSpec(selection)}. Use /hyagents models to change the selection.`);
   }
 }
 
@@ -47,10 +47,10 @@ export function activeAgent(prompt: string): string | undefined {
 export function assertSelection(name: RoleName, model: Model<Api> | undefined, thinking: string, required: ModelSelection = ROLES[name]): void {
   const actual = model ? `${model.provider}/${model.id}:${thinking}` : "no model";
   if (!model || model.provider !== required.provider || model.id !== required.id || thinking !== required.thinking) {
-    throw new Error(`HyAgents: ${name} requires ${modelSpec(required)}; resolved ${actual}. Use /hyagents models to change the selection; no automatic fallback is allowed.`);
+    throw new Error(`Hybrid Subagents: ${name} requires ${modelSpec(required)}; resolved ${actual}. Use /hyagents models to change the selection; no automatic fallback is allowed.`);
   }
   if (!getSupportedThinkingLevels(model).includes(required.thinking)) {
-    throw new Error(`HyAgents: ${modelSpec(required)} is not supported by the installed Pi model registry. Choose a supported thinking level with /hyagents models; do not lower it automatically.`);
+    throw new Error(`Hybrid Subagents: ${modelSpec(required)} is not supported by the installed Pi model registry. Choose a supported thinking level with /hyagents models; do not lower it automatically.`);
   }
 }
 
@@ -60,7 +60,7 @@ export function parseSelection(spec: string, thinking?: string): ModelSelection 
   const separator = qualified.indexOf("/");
   const level = match?.[3] ?? thinking;
   if (separator < 1 || separator === qualified.length - 1 || !level || !/^(off|minimal|low|medium|high|xhigh|max)$/.test(level)) {
-    throw new Error(`HyAgents requires an explicit provider/model and thinking level: ${spec}. Select them with /hyagents models.`);
+    throw new Error(`Hybrid Subagents requires an explicit provider/model and thinking level: ${spec}. Select them with /hyagents models.`);
   }
   return { provider: qualified.slice(0, separator), id: qualified.slice(separator + 1), thinking: level as Thinking };
 }
