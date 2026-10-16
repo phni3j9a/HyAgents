@@ -4,7 +4,7 @@
 
 Pi版は、通常のPiをMainにして、4種類の専門Agentを必要に応じて使い分ける軽量パッケージです。OMPの委任・レビュー方針を参考にし、起動、並列実行、結果回収、セッション継続は **pi-subagents** に任せます。
 
-旧称はHyAgentsです。既存設定・保持セッションとの互換性のため、コマンド `/hyagents`、Agent名 `hyagents.*`、Skill名 `hyagents`、設定ファイル `hyagents.json` と内部の保存キーは維持します。改名に伴う設定の移行は不要です。
+旧称はHyAgentsです。既存設定・保持セッションとの互換性のため、コマンド `/hyagents`、Agent名 `hyagents.*`、Skill名 `hyagents`は維持します。モデル・Thinkingの既存設定もそのまま使えます。Fastの旧独自設定については下記の更新時の注意を参照してください。
 
 ## Agent構成
 
@@ -39,7 +39,7 @@ pi install npm:pi-hybrid-subagents
 
 未公開の最新版を試す場合は、`npm:pi-hybrid-subagents` の代わりに `git:github.com/phni3j9a/hybrid-subagents` を指定します。Pi 1.2では、Hybrid Subagentsだけを更新する場合は `pi update npm:pi-hybrid-subagents`、全パッケージを更新する場合は `pi update --extensions` を使います（`pi update` 単独はPi本体の更新です）。
 
-旧リポジトリ名で導入したGitHub版からnpm版へ切り替える場合は、二重に読み込まれないよう、先に元のソース指定で登録を外してください。モデル・Thinking・Fastの保存済み設定はそのまま使えます。
+旧リポジトリ名で導入したGitHub版からnpm版へ切り替える場合は、二重に読み込まれないよう、先に元のソース指定で登録を外してください。モデル・Thinkingの保存済み設定はそのまま使えます。旧独自Fast設定は下記の手順で再設定してください。
 
 ```sh
 pi remove git:github.com/phni3j9a/HyAgents
@@ -48,7 +48,7 @@ pi install npm:pi-hybrid-subagents
 
 起動中なら `/reload`、そうでなければ通常どおり `pi` を起動します。**毎回 `/hyagents` やSkillを呼び出す必要はありません。** 4つのAgentはパッケージのmanifestから発見され、Mainへ委任方針が自動適用されます。
 
-`pi-subagents` はHybrid Subagentsの依存パッケージにも含まれますが、これは公開の起動検証APIを読み込むためです。依存関係のインストールだけでは `subagent` ツールが有効にならないため、上記の `pi install npm:pi-subagents@0.76.1` も必要です。二重にExtensionを読み込ませる必要はありません。
+`pi-subagents` はHybrid Subagentsの依存パッケージにも含まれますが、これは設定の解決APIと設定エディターを読み込むためです。依存関係のインストールだけでは `subagent` ツールが有効にならないため、上記の `pi install npm:pi-subagents@0.76.1` も必要です。二重にExtensionを読み込ませる必要はありません。
 
 各プロバイダーの認証はPiの通常の方法で設定してください。Hybrid Subagentsは認証情報を管理しません。モデル設定はユーザーが保存操作を行った場合にだけ更新します。
 
@@ -94,25 +94,27 @@ Scout／Reviewerの非編集方針はプロンプトによる役割定義です�
 /hyagents models reset
 ```
 
-引数なしの `models` は4役割の現在の設定を表示します（Fast有効時は末尾に `fast`）。役割を選んだ後、**プロバイダー → モデル → Thinking → Fast（OpenAI系のみ） → 保存先**の順に選択します。`models worker` などではその役割の設定を直接開きます。途中でEscなどでキャンセルすると保存しません。
+引数なしの `models` は4役割の現在の設定を表示します（Fast有効時は末尾に `fast`）。役割を選んだ後、**プロバイダー → モデル → Thinking → Fast（legacyの `openai-codex` のみ） → 保存先**の順に選択します。`models worker` などではその役割の設定を直接開きます。途中でEscなどでキャンセルすると保存しません。
 
 - モデル候補はPiで認証設定済みのプロバイダーの登録モデルです。実際の利用権限・利用枠は起動時に確認されます。
 - Thinkingには、そのモデルが対応する値だけを表示します。推論非対応モデルは `off` です。
 - `User — all projects` はユーザー共通設定、`Project — this project only` はプロジェクト設定へ保存します。未信頼プロジェクトでは後者を表示しません。
 - プロジェクト設定が優先されます。ユーザー共通設定を変更してもプロジェクト設定が優先される場合は、その旨と実効値を表示します。
 - 保存後、**新しく起動する子Agentから反映**されます。設定変更のたびに `/reload` を実行する必要はありません。ほかのPiプロセスの表示は再読込まで古い場合があります。
-- 実行中の子Agentは変更しません。v0.2以降に起動して会話が保存された保持セッションは、再開時も起動時の設定を使います。新設定を使うには新しい子Agentを開始してください。
+- 実行中の子Agentは変更しません。保持セッションの再開はpi-subagents標準の動作に従います。新設定を使うには新しい子Agentを開始してください。
 - `reset` は保存先を選んで確認した後、4役割のモデル・Thinkingを上表の初期値に戻し、Fastをoffにします。他の設定は維持します。
 
 ### Fastモード
 
-OpenAI系プロバイダー（`openai`、`openai-codex`）のモデルを選ぶと、Fastモードのon/offを選べます。onの子Agentは、プロバイダーへのリクエストに `service_tier: "priority"` を付けます。処理は速くなる一方、利用枠・費用の消費が増えます（Piの料金計算では通常の約2倍、gpt-5.5は2.5倍）。Sign in with ChatGPT利用時に優先処理がどの程度効くかはOpenAI側の扱いに依存します。
+**legacyの `openai-codex` プロバイダーに限り**、Fastモードのon/offを選べます。認証方式ではなく、選択モデルのプロバイダー名で判定します。pi-subagents標準の `fast: true` が子のリクエストに `service_tier: "priority"` を付けます。優先処理の利用可否・速度・利用枠や費用への影響はプロバイダー側の扱いに依存します。
 
-- Anthropicなど他のプロバイダーでは選択肢を表示せず、offとして保存します。手動設定で非対応プロバイダーにFastを有効にした場合、子Agentは起動時に停止します。
-- pi-subagentsネイティブの `fast: true` は `openai-codex/*` 専用で、Pi 1.2以降のSign in with ChatGPT（`openai` プロバイダー）では使えないため、Hybrid Subagentsは独自に適用します。ネイティブの `fast` は変更しません。
-- 保持セッションは、モデルと同様に起動時のFast選択を維持します。Fast対応前に作成した保持セッションはoffとして扱います。
+- Pi 1.2の `openai`（Sign in with ChatGPTを含む）やAnthropicなどではFast選択を表示せず、offとして保存します。認証やモデルをlegacyへ自動変更しません。
+- モデル・Thinking・Fastは、pi-subagents標準の `subagents.agentOverrides` にまとめて保存します。独自のリクエスト書き換えや子拡張はありません。
+- 保持セッションの設定はpi-subagentsに任せます。新設定を確実に適用するには新しい子Agentを開始してください。
 
-モデル・Thinkingの保存先はpi-subagents標準の `subagents.agentOverrides` です。Fastは同じディレクトリの `hyagents.json`（ユーザー: `~/.pi/agent/hyagents.json`、プロジェクト: `.pi/hyagents.json`）に `{ "fast": { "hyagents.worker": true } }` の形で保存し、プロジェクト設定が優先されます（未信頼プロジェクトでは無視）。pi-subagentsの設定エディターは未知のoverride項目を書き込まないため、別ファイルにしています。ユーザー設定は通常 `~/.pi/agent/settings.json`、プロジェクト設定はpi-subagentsが解決するプロジェクトの `.pi/settings.json` です。設定ルートがない場合、プロジェクト保存時に現在のディレクトリへ `.pi` を作成します。パッケージ内のAgent定義を直接編集する必要はありません。
+**v0.3.0からv0.4.0へ更新する場合:** 旧 `~/.pi/agent/hyagents.json`／プロジェクトの `.pi/hyagents.json` は読み書きしません。自動移行・自動削除もしません。Fastが必要なら `/hyagents models` で `openai-codex` のモデルを選んで再保存してください。既存のネイティブ `fast` 設定はそのまま有効です。旧版で作成した保持セッションにもFastや検証拡張の互換性は保証しないため、更新後は新しい子Agentを開始してください。旧ファイルは他の用途に使っていないことを確認してから手動で削除できます。
+
+ユーザー設定は通常 `~/.pi/agent/settings.json`、プロジェクト設定はpi-subagentsが解決するプロジェクトの `.pi/settings.json` です。未信頼プロジェクトの設定は読みません。設定ルートがない場合、プロジェクト保存時に現在のディレクトリへ `.pi` を作成します。パッケージ内のAgent定義を直接編集する必要はありません。
 
 例（Workerだけを変更）:
 
@@ -122,22 +124,21 @@ OpenAI系プロバイダー（`openai`、`openai-codex`）のモデルを選ぶ�
     "agentOverrides": {
       "hyagents.worker": {
         "model": "openai-codex/gpt-6.1-sol:high",
-        "thinking": "high"
+        "thinking": "high",
+        "fast": true
       }
     }
   }
 }
 ```
 
-通常はコマンドから両項目をまとめて設定してください。手動設定でも `model` のThinking suffixと `thinking` を一致させます。ヘッドレス実行ではこの設定ファイルを利用してください。選択メニューはTUIと選択ダイアログ対応のRPCクライアントで利用できます。
+通常はコマンドから3項目をまとめて設定してください。手動設定でも `model` のThinking suffixと `thinking` を一致させます。ヘッドレス実行ではこの設定ファイルを利用してください。選択メニューはTUIと選択ダイアログ対応のRPCクライアントで利用できます。
 
-### 選択の検証
+### 起動時のモデル解決
 
-MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検証Extensionを登録します。新しい子の設定は公開preflight APIで取得し、**実際のモデル・Thinkingを最初のモデルリクエスト前に照合**します。Fastモードの適用も同じ検証Extensionが行います。per-run overrideやPiによる未対応Thinkingの丸めで設定から外れた場合は停止します。Mainのモデル／Thinkingは変更しません。
+モデル・Thinking・Fastの解決、per-run override、保持セッションの再開はpi-subagentsに任せます。Hybrid Subagents独自のモデル・Thinking一致検証や起動拒否はありません。Mainのモデル／Thinkingは変更しません。設定画面と `/hyagents` では引き続き設定・モデル登録・認証の準備状況を診断します。
 
-通常の `subagent`、ネイティブworkflow、`/run` が対象です。保持セッション用の選択はPi標準のcustom entryに記録し、独自のセッションファイルやCheckpointは作りません。v0.1で作成した保持セッションには記録がないため、初回再開時に現在の設定と照合します。不一致なら新しい子Agentを開始してください。
-
-既存の `subagents.modelScope` や `maxThinking` は維持します。起動が拒否されても制約を自動で緩めません。Hybrid Subagentsではプロバイダーを含む明示的な役割設定を使い、Main依存の `model: inherit` や競合する `agentOverridesByProvider` は対象外です。後者は `/hyagents` で診断します。`hyagents.*` を外部CLI／リモート実行用Agentで上書きする運用も対象外です。この照合は任意の信頼済みExtensionに対するセキュリティ境界ではありません。
+既存の `subagents.modelScope` や `maxThinking` など、pi-subagents自身の制限は維持されます。Hybrid Subagentsはそれらを自動で緩めません。provider別overrideも標準の優先順位で解決します。Mainへの委任方針ではユーザーの選択を尊重するよう求めますが、これは独自の起動時ガードではありません。
 
 ## Reviewerの出力
 
@@ -160,16 +161,14 @@ MainのExtensionはpi-subagentsの公開 `required-child-extensions` APIへ検�
 | --- | --- |
 | `agents/` | 名前空間付きの4つのネイティブAgent定義 |
 | `skills/hyagents/SKILL.md` | 短い委任方針。Extensionもこの本文を読み、重複した方針を持たない |
-| `extensions/hyagents.ts` | Mainへの自動適用、コマンド登録、検証Extensionの登録 |
-| `extensions/verify-child.ts` | ネイティブ子セッション起動時のモデル検証とFastモードの適用 |
-| `src/models.ts` | 推奨初期値、モデル表現と照合 |
-| `src/model-command.ts` | 役割別のモデル・Thinking選択メニュー |
+| `extensions/hyagents.ts` | Mainへの自動適用、コマンド登録と準備状況の診断 |
+| `src/models.ts` | 推奨初期値、モデル表現とFast対応判定 |
+| `src/model-command.ts` | 役割別のモデル・Thinking・Fast選択メニュー |
 | `src/native-settings.ts` | ネイティブ設定の読み取りと保存 |
-| `src/fast-settings.ts` | Fastモード設定（`hyagents.json`）の読み取りと保存 |
 
 Mainへの適用にはPiの構造化prompt sectionを使い、他のExtensionの指示やprompt cacheを維持します。子AgentへMain用ポリシーを再注入しません。組み込みの `worker`、`scout`、`reviewer` は上書きしません。
 
-pi-subagents 0.76.1のrequired-child-extension登録は、親セッションごとに1つです。他のホストExtensionが既に同じ登録を所有している場合、Hybrid Subagentsは競合を表示して自動委任を有効化しません。そのExtensionの登録を上書きしません。
+Hybrid Subagentsは必須子拡張を登録しません。他のホストExtensionの登録を奪わず、bili等の子拡張・圧縮設定も変更しません。
 
 設定の保存では、固定依存のpi-subagents 0.76.1が使う内部設定エディターを1つのadapterから呼び出します。ファイルロック・原子的保存・他フィールドの維持・プロジェクトルート解決を共有するためです。依存バージョンを更新するときはこのadapterの互換性も確認してください。
 
@@ -193,7 +192,7 @@ npm run check
 npm pack --dry-run
 ```
 
-テストは一時ディレクトリを使い、実際のPi／pi-subagentsのAgent発見、起動前の契約解決、子セッション起動、モデル／Thinking不一致の拒否、保持セッションの再オープン、ReviewerのJSON Schemaを確認します。通常のテストは外部モデルへリクエストを送らず、ユーザーの認証・Pi設定を変更しません。
+テストは一時ディレクトリを使い、実際のPi／pi-subagentsのAgent発見、起動前の契約解決、子セッション起動、標準Fastのpriority付与と他ホスト拡張との共存、per-run overrideの受け入れ、保持セッションの再オープン、ReviewerのJSON Schemaを確認します。通常のテストは外部モデルへリクエストを送らず、ユーザーの認証・Pi設定を変更しません。
 
 実モデルの応答品質、費用、プロバイダーの認証成功、実作業を伴う並列実行／Resumeは、認証済み環境で別途確認してください。
 

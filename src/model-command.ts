@@ -1,7 +1,7 @@
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { assertSelection, describeSelection, isRole, modelSpec, ROLES, ROLE_NAMES, supportsFast, type ModelSelection, type RoleName } from "./models.ts";
-import { checkProviderSelection, configuredFast, configuredSelection, saveSelection, type SettingsScope } from "./native-settings.ts";
+import { describeSelection, isRole, modelSpec, ROLES, ROLE_NAMES, supportsFast, type ModelSelection, type RoleName } from "./models.ts";
+import { configuredFast, configuredSelection, saveSelection, type SettingsScope } from "./native-settings.ts";
 
 const FAST_CHOICES = ["Off — standard service tier", "On — priority service tier (faster, higher usage/cost)"];
 
@@ -19,7 +19,6 @@ async function reportSaved(name: RoleName, wanted: ModelSelection, fast: boolean
   const saved = describeSelection(wanted, fast);
   try {
     const actual = await configuredSelection(name, ctx);
-    await checkProviderSelection(name, ctx, actual);
     const effective = describeSelection(actual, await configuredFast(name, ctx));
     const shadowed = effective !== saved;
     ctx.ui.notify(`${name}: saved ${saved}\n${file}\n${shadowed
@@ -72,12 +71,13 @@ export async function modelCommand(args: string, ctx: ExtensionCommandContext): 
   const thinking = await ctx.ui.select(`${name} — thinking`, levels);
   if (!thinking || !levels.includes(thinking as typeof levels[number])) return;
   const selection: ModelSelection = { provider: model.provider, id: model.id, thinking: thinking as typeof levels[number] };
-  assertSelection(name, model, thinking, selection);
   let fast = false;
   if (supportsFast(selection.provider)) {
     const choice = await ctx.ui.select(`${name} — fast mode`, FAST_CHOICES);
     if (!choice || !FAST_CHOICES.includes(choice)) return;
     fast = choice === FAST_CHOICES[1];
+  } else {
+    ctx.ui.notify("Fast mode is available only for the legacy openai-codex provider. This selection uses Fast off.", "info");
   }
   const scope = await chooseScope(ctx);
   if (!scope) return;
